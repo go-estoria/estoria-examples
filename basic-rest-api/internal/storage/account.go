@@ -78,7 +78,7 @@ func (a *Account) ApplyEvent(_ context.Context, event estoria.EntityEvent) error
 		return nil
 
 	case *AccountDeletedEvent:
-		// slog.Info("applying account deleted event", "reason", e.Reason)
+		slog.Info("applying account deleted event", "reason", e.Reason)
 		if a.DeletedAt != nil {
 			return fmt.Errorf("account already deleted")
 		}
@@ -93,12 +93,12 @@ func (a *Account) ApplyEvent(_ context.Context, event estoria.EntityEvent) error
 		return nil
 
 	case *UserAddedEvent:
-		// slog.Info("applying user created event", "username", e.Username)
+		slog.Info("applying user created event", "username", e.Username)
 		a.Users = append(a.Users, e.Username)
 		return nil
 
 	case *UserRemovedEvent:
-		// slog.Info("applying user deleted event", "username", e.Username)
+		slog.Info("applying user deleted event", "username", e.Username)
 		for i, user := range a.Users {
 			if user == e.Username {
 				a.Users = append(a.Users[:i], a.Users[i+1:]...)

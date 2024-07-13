@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/go-estoria/estoria"
 	"github.com/go-estoria/estoria/typeid"
@@ -37,13 +36,9 @@ func (c *Client) CreateAccount(ctx context.Context, initialUser string) (*Accoun
 		return nil, fmt.Errorf("appending event: %w", err)
 	}
 
-	slog.Info("saving aggregate", "id", aggregate.ID())
-
 	if err := c.accounts.Save(ctx, aggregate, estoria.SaveAggregateOptions{}); err != nil {
 		return nil, fmt.Errorf("saving aggregate: %w", err)
 	}
-
-	slog.Info("saved aggregate", "id", aggregate.ID())
 
 	// return the entity from the aggregate
 	return aggregate.Entity(), nil
@@ -55,8 +50,6 @@ func (c *Client) GetAccount(ctx context.Context, accountID uuid.UUID) (*Account,
 	if err != nil {
 		return nil, fmt.Errorf("loading aggregate: %w", err)
 	}
-
-	slog.Info("loaded aggregate", "id", aggregate.ID(), "entity", aggregate.Entity().String())
 
 	return aggregate.Entity(), nil
 }
