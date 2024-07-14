@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-estoria/estoria"
+	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
 )
@@ -13,11 +13,11 @@ import (
 // It is responsible for creating, reading, updating, and deleting Accounts.
 // It is dependent on an Estoria AggregateStore that can load and store Account aggregates.
 type Client struct {
-	accounts estoria.AggregateStore[*Account]
+	accounts aggregatestore.Store[*Account]
 }
 
 // NewClient creates a new database client using the provided aggregate store.
-func NewClient(accounts estoria.AggregateStore[*Account]) *Client {
+func NewClient(accounts aggregatestore.Store[*Account]) *Client {
 	return &Client{
 		accounts: accounts,
 	}
@@ -40,7 +40,7 @@ func (c *Client) CreateAccount(ctx context.Context, initialUser string) (*Accoun
 		return nil, fmt.Errorf("appending event: %w", err)
 	}
 
-	if err := c.accounts.Save(ctx, aggregate, estoria.SaveAggregateOptions{}); err != nil {
+	if err := c.accounts.Save(ctx, aggregate, aggregatestore.SaveOptions{}); err != nil {
 		return nil, fmt.Errorf("saving aggregate: %w", err)
 	}
 
@@ -50,7 +50,7 @@ func (c *Client) CreateAccount(ctx context.Context, initialUser string) (*Accoun
 // GetAccount retrieves an account by its ID.
 func (c *Client) GetAccount(ctx context.Context, accountID uuid.UUID) (*Account, error) {
 	aggregateID := typeid.FromUUID(accountType, accountID)
-	aggregate, err := c.accounts.Load(ctx, aggregateID, estoria.LoadAggregateOptions{})
+	aggregate, err := c.accounts.Load(ctx, aggregateID, aggregatestore.LoadOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("loading aggregate: %w", err)
 	}
@@ -61,7 +61,7 @@ func (c *Client) GetAccount(ctx context.Context, accountID uuid.UUID) (*Account,
 // DeleteAccount deletes an account by its ID.
 func (c *Client) DeleteAccount(ctx context.Context, accountID uuid.UUID, reason string) error {
 	aggregateID := typeid.FromUUID(accountType, accountID)
-	aggregate, err := c.accounts.Load(ctx, aggregateID, estoria.LoadAggregateOptions{})
+	aggregate, err := c.accounts.Load(ctx, aggregateID, aggregatestore.LoadOptions{})
 	if err != nil {
 		return fmt.Errorf("loading aggregate: %w", err)
 	}
@@ -73,7 +73,7 @@ func (c *Client) DeleteAccount(ctx context.Context, accountID uuid.UUID, reason 
 		return fmt.Errorf("appending event: %w", err)
 	}
 
-	if err := c.accounts.Save(ctx, aggregate, estoria.SaveAggregateOptions{}); err != nil {
+	if err := c.accounts.Save(ctx, aggregate, aggregatestore.SaveOptions{}); err != nil {
 		return fmt.Errorf("saving aggregate: %w", err)
 	}
 
