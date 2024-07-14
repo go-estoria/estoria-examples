@@ -14,9 +14,7 @@ The example code uses an in-memory event store for simplicity; terminating the a
 
 To run the example, run the Go program in the `main` package:
 
-    ```shell
     go run ./cmd
-    ```
 
 This will start a simple HTTP server to which you can send requests to create, update, and retrieve entities.
 

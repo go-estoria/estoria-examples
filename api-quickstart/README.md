@@ -8,9 +8,9 @@ In-memory implementations are used wherever persistence is required so the examp
 
 To run the example, run the Go program in the `main` package:
 
-    ```shell
-    go run ./cmd
-    ```
+```shell
+go run ./cmd
+```
 
 This will run the example code, which constructs Estoria components and then creates, saves, and retrieves an entity, appending events to modify the entity's state. Output is printed to the console.
 
