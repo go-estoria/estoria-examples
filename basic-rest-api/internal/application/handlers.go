@@ -10,6 +10,11 @@ import (
 )
 
 // AccountDTO is a data transfer object for an account.
+//
+// The storage.Account entity could be serializied directly if desired.
+// However, using a DTO allows for control over the shape of the data
+// that is sent to the client. This can be useful for versioning APIs
+// or for filtering sensitive information.
 type AccountDTO struct {
 	ID        uuid.UUID  `json:"id"`
 	Users     []string   `json:"users"`
@@ -18,6 +23,7 @@ type AccountDTO struct {
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
+// Handles POST /accounts
 func (a *App) HandleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	req := make(map[string]string)
@@ -54,6 +60,7 @@ func (a *App) HandleCreateAccount(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// Handles GET /accounts?id=<id>
 func (a *App) HandleGetAccount(w http.ResponseWriter, r *http.Request) {
 	accountID := r.URL.Query().Get("id")
 	if accountID == "" {
@@ -75,15 +82,13 @@ func (a *App) HandleGetAccount(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("account retrieved", "account", account)
 
-	resp := AccountDTO{
+	b, err := json.Marshal(AccountDTO{
 		ID:        account.ID,
 		Users:     account.Users,
 		Balance:   account.Balance,
 		CreatedAt: account.CreatedAt,
 		DeletedAt: account.DeletedAt,
-	}
-
-	b, err := json.Marshal(resp)
+	})
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -94,6 +99,7 @@ func (a *App) HandleGetAccount(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
+// Handles DELETE /accounts?id=<id>
 func (a *App) HandleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	accountID := r.URL.Query().Get("id")
 	if accountID == "" {

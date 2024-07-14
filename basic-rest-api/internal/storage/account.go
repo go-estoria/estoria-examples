@@ -15,7 +15,9 @@ const (
 	accountType = "account"
 )
 
-// An Account is an example entity that satifies the requirements of the estoria.Entity interface.
+// An Account is a bank account. This is a business entity that satifies
+// the requirements of the estoria.Entity interface. In doing so, it can
+// be stored and retrieved via event sourcing.
 type Account struct {
 	ID      uuid.UUID
 	Users   []string
@@ -28,6 +30,9 @@ type Account struct {
 var _ estoria.Entity = (*Account)(nil)
 
 // NewAccount creates a new account.
+// This is a factory function that creates a new account with a unique ID.
+// Estoria uses this function to create new instances of the entity when
+// creating new aggregates and loading existing aggregates from the event store.
 func NewAccount() *Account {
 	tid, err := typeid.NewUUID(accountType)
 	if err != nil {
@@ -43,16 +48,20 @@ func NewAccount() *Account {
 }
 
 // EntityID returns the ID of the entity.
+// Satifies the estoria.Entity interface.
 func (a *Account) EntityID() typeid.UUID {
 	return typeid.FromUUID(accountType, a.ID)
 }
 
 // SetEntityID sets the ID of the entity.
+// Satifies the estoria.Entity interface.
 func (a *Account) SetEntityID(id typeid.UUID) {
 	a.ID = id.UUID()
 }
 
 // EventTypes returns the event types that can be applied to the entity.
+// Estoria uses this method to determine which events can be used with the entity.
+// Satifies the estoria.Entity interface.
 func (a *Account) EventTypes() []estoria.EntityEvent {
 	return []estoria.EntityEvent{
 		&AccountCreatedEvent{},
@@ -64,6 +73,8 @@ func (a *Account) EventTypes() []estoria.EntityEvent {
 }
 
 // ApplyEvent applies an event to the entity.
+// Type switching is used to determine which type of event is being applied.
+// Satifies the estoria.Entity interface.
 func (a *Account) ApplyEvent(_ context.Context, event estoria.EntityEvent) error {
 	switch e := event.(type) {
 

@@ -9,17 +9,21 @@ import (
 	"github.com/gofrs/uuid/v5"
 )
 
+// AccountStorage provides APIs for interacting with the storage layer.
+// The storage layer is responsible for creating, reading, updating, and deleting Accounts.
 type AccountStorage interface {
 	CreateAccount(ctx context.Context, initialUser string) (*storage.Account, error)
 	GetAccount(ctx context.Context, accountID uuid.UUID) (*storage.Account, error)
 	DeleteAccount(ctx context.Context, accountID uuid.UUID, reason string) error
 }
 
+// App holds the dependencies and defines the request handlers for the application.
 type App struct {
 	http *http.Server
 	stg  AccountStorage
 }
 
+// New creates a new App with the provided dependencies.
 func New(server *http.Server, stg AccountStorage) *App {
 	app := &App{
 		http: server,
@@ -45,6 +49,7 @@ func New(server *http.Server, stg AccountStorage) *App {
 	return app
 }
 
+// Run starts the application and listens for incoming requests.
 func (a *App) Run(ctx context.Context) {
 	go func() {
 		slog.Info("listening", "addr", a.http.Addr)

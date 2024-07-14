@@ -9,16 +9,21 @@ import (
 	"github.com/gofrs/uuid/v5"
 )
 
+// Client is a storage client that provides methods for interacting with the storage layer.
+// It is responsible for creating, reading, updating, and deleting Accounts.
+// It is dependent on an Estoria AggregateStore that can load and store Account aggregates.
 type Client struct {
 	accounts estoria.AggregateStore[*Account]
 }
 
+// NewClient creates a new storage client using the provided aggregate store.
 func NewClient(accounts estoria.AggregateStore[*Account]) *Client {
 	return &Client{
 		accounts: accounts,
 	}
 }
 
+// CreateAccount creates a new account with the provided initial user.
 func (c *Client) CreateAccount(ctx context.Context, initialUser string) (*Account, error) {
 	if initialUser == "" {
 		return nil, fmt.Errorf("initial user cannot be empty")
@@ -29,7 +34,6 @@ func (c *Client) CreateAccount(ctx context.Context, initialUser string) (*Accoun
 		return nil, fmt.Errorf("creating aggregate: %w", err)
 	}
 
-	// append the initial event to the aggregate
 	if err := aggregate.Append(
 		&AccountCreatedEvent{Username: initialUser},
 	); err != nil {
@@ -40,10 +44,10 @@ func (c *Client) CreateAccount(ctx context.Context, initialUser string) (*Accoun
 		return nil, fmt.Errorf("saving aggregate: %w", err)
 	}
 
-	// return the entity from the aggregate
 	return aggregate.Entity(), nil
 }
 
+// GetAccount retrieves an account by its ID.
 func (c *Client) GetAccount(ctx context.Context, accountID uuid.UUID) (*Account, error) {
 	aggregateID := typeid.FromUUID(accountType, accountID)
 	aggregate, err := c.accounts.Load(ctx, aggregateID, estoria.LoadAggregateOptions{})
@@ -54,6 +58,7 @@ func (c *Client) GetAccount(ctx context.Context, accountID uuid.UUID) (*Account,
 	return aggregate.Entity(), nil
 }
 
+// DeleteAccount deletes an account by its ID.
 func (c *Client) DeleteAccount(ctx context.Context, accountID uuid.UUID, reason string) error {
 	aggregateID := typeid.FromUUID(accountType, accountID)
 	aggregate, err := c.accounts.Load(ctx, aggregateID, estoria.LoadAggregateOptions{})
@@ -61,7 +66,7 @@ func (c *Client) DeleteAccount(ctx context.Context, accountID uuid.UUID, reason 
 		return fmt.Errorf("loading aggregate: %w", err)
 	}
 
-	// append the deletion event to the aggregate
+	// by definition, deleting an aggregate is a soft delete
 	if err := aggregate.Append(&AccountDeletedEvent{
 		Reason: reason,
 	}); err != nil {
