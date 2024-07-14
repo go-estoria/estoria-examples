@@ -29,7 +29,7 @@ func (c *Client) CreateAccount(ctx context.Context, initialUser string) (*Accoun
 		return nil, fmt.Errorf("initial user cannot be empty")
 	}
 
-	aggregate, err := c.accounts.NewAggregate(nil) // passing nil generates a new aggregate ID
+	aggregate, err := c.accounts.New(nil) // passing nil generates a new aggregate ID
 	if err != nil {
 		return nil, fmt.Errorf("creating aggregate: %w", err)
 	}

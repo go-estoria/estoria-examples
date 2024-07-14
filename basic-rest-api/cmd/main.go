@@ -28,7 +28,7 @@ func main() {
 	eventStore := memory.NewEventStore()
 
 	// create an aggregate store to load and store Accounts
-	aggregateStore, err := aggregatestore.NewEventSourcedAggregateStore(eventStore, database.NewAccount)
+	aggregateStore, err := aggregatestore.NewEventSourcedStore(eventStore, database.NewAccount)
 	if err != nil {
 		slog.Error("creating aggregate store", "error", err)
 		return
