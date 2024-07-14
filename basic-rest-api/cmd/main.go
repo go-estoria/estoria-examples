@@ -24,7 +24,7 @@ func main() {
 		})))
 	}
 
-	// create an event store
+	// create an event store (in-memory) to store events
 	eventStore := memory.NewEventStore()
 
 	// create an aggregate store to load and store Accounts
@@ -34,15 +34,16 @@ func main() {
 		return
 	}
 
-	// storage client used by the app's request handlers to interact with the database using event sourcing
+	// create the storage client used by the app's request handlers
+	// for interacting with the database using event sourcing
 	stg := storage.NewClient(aggregateStore)
 
-	// http server to serve the REST API
+	// create an HTTP server to serve the REST API
 	httpServer := &http.Server{
 		Addr: ":8080",
 	}
 
-	// create and run the application, injecting the http server and storage client as dependencies
+	// create and run the application, injecting the HTTP server and storage client as dependencies
 	app := application.New(httpServer, stg)
 	app.Run(ctx)
 
@@ -52,10 +53,4 @@ func main() {
 	<-sig
 
 	slog.Info("shutting down")
-}
-
-func httpRouter() *http.ServeMux {
-	mux := http.NewServeMux()
-
-	return mux
 }
