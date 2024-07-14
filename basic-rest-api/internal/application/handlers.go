@@ -9,9 +9,9 @@ import (
 	"github.com/gofrs/uuid/v5"
 )
 
-// AccountDTO is a data transfer object for an account.
+// AccountDTO is a data transfer object for an Account.
 //
-// The storage.Account entity could be serializied directly if desired.
+// The database.Account entity could be serializied directly if desired.
 // However, using a DTO allows for control over the shape of the data
 // that is sent to the client. This can be useful for versioning APIs
 // or for filtering sensitive information.
@@ -32,7 +32,7 @@ func (a *App) HandleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	account, err := a.stg.CreateAccount(r.Context(), req["user"])
+	account, err := a.db.CreateAccount(r.Context(), req["user"])
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -74,7 +74,7 @@ func (a *App) HandleGetAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	account, err := a.stg.GetAccount(r.Context(), id)
+	account, err := a.db.GetAccount(r.Context(), id)
 	if err != nil {
 		http.Error(w, "error getting account", http.StatusInternalServerError)
 		return
@@ -126,7 +126,7 @@ func (a *App) HandleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.stg.DeleteAccount(r.Context(), id, reason); err != nil {
+	if err := a.db.DeleteAccount(r.Context(), id, reason); err != nil {
 		http.Error(w, "error deleting account", http.StatusInternalServerError)
 		return
 	}

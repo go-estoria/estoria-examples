@@ -1,4 +1,4 @@
-package storage
+package database
 
 import (
 	"github.com/go-estoria/estoria"

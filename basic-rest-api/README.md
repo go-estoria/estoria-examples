@@ -37,8 +37,8 @@ The API has the following endpoints:
 The project is structured as follows:
 
 - `cmd`: Main package; configures and injects application dependencies and starts the HTTP server
-- `internal/application`: Domain logic layer; handles HTTP requests and uses the storage layer to load and store Accounts
-- `internal/storage`: Storage layer; uses Estoria to load and store Accounts using an aggregate store
+- `internal/application`: Domain logic layer; handles HTTP requests and uses the database layer to load and store Accounts
+- `internal/database`: Database layer; uses Estoria to load and store Accounts via an aggregate store
 
 ## See Also
 

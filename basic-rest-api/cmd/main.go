@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/go-estoria/estoria-examples/basic-rest-api/internal/application"
-	"github.com/go-estoria/estoria-examples/basic-rest-api/internal/storage"
+	"github.com/go-estoria/estoria-examples/basic-rest-api/internal/database"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore/memory"
 )
@@ -28,22 +28,22 @@ func main() {
 	eventStore := memory.NewEventStore()
 
 	// create an aggregate store to load and store Accounts
-	aggregateStore, err := aggregatestore.NewEventSourcedAggregateStore(eventStore, storage.NewAccount)
+	aggregateStore, err := aggregatestore.NewEventSourcedAggregateStore(eventStore, database.NewAccount)
 	if err != nil {
 		slog.Error("creating aggregate store", "error", err)
 		return
 	}
 
-	// create the storage client used by the app's request handlers
+	// create the database client used by the app's request handlers
 	// for interacting with the database using event sourcing
-	stg := storage.NewClient(aggregateStore)
+	stg := database.NewClient(aggregateStore)
 
 	// create an HTTP server to serve the REST API
 	httpServer := &http.Server{
 		Addr: ":8080",
 	}
 
-	// create and run the application, injecting the HTTP server and storage client as dependencies
+	// create and run the application, injecting the HTTP server and database client as dependencies
 	app := application.New(httpServer, stg)
 	app.Run(ctx)
 

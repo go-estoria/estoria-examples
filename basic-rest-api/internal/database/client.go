@@ -1,4 +1,4 @@
-package storage
+package database
 
 import (
 	"context"
@@ -9,14 +9,14 @@ import (
 	"github.com/gofrs/uuid/v5"
 )
 
-// Client is a storage client that provides methods for interacting with the storage layer.
+// Client is a database client that provides methods for interacting with the database layer.
 // It is responsible for creating, reading, updating, and deleting Accounts.
 // It is dependent on an Estoria AggregateStore that can load and store Account aggregates.
 type Client struct {
 	accounts estoria.AggregateStore[*Account]
 }
 
-// NewClient creates a new storage client using the provided aggregate store.
+// NewClient creates a new database client using the provided aggregate store.
 func NewClient(accounts estoria.AggregateStore[*Account]) *Client {
 	return &Client{
 		accounts: accounts,
