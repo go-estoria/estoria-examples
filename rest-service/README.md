@@ -1,6 +1,6 @@
-# Basic REST API Example using Estoria
+# REST Service
 
-This example demonstrates how to create a basic REST API that uses [Estoria](https://github.com/go-estoria/estoria) to store and load entities using event sourcing.
+This example demonstrates how to create a basic REST API service that uses [Estoria](https://github.com/go-estoria/estoria) to store and load entities using event sourcing.
 
 Key Takeaways:
 

@@ -7,7 +7,7 @@ Example applications demonstrating the features of Estoria, an event sourcing to
 | Example | Description |
 | ------- | ----------- |
 | [API Quickstart](./api-quickstart) | Demonstrates the basic usage of all core Estoria components in a single, unannotated `main()` function. |
-| [REST API Service](./rest-api) | Demonstrates how to create a basic REST API service that uses Estoria to store and load entities using event sourcing. |
+| [REST Service](./rest-api) | Demonstrates how to create a basic REST API service that uses Estoria to store and load entities using event sourcing. |
 
 ## See Also
 
