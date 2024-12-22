@@ -11,6 +11,7 @@ import (
 	"github.com/go-estoria/estoria/eventstore/memory"
 	"github.com/go-estoria/estoria/outbox"
 	"github.com/go-estoria/estoria/snapshotstore"
+	"github.com/gofrs/uuid/v5"
 )
 
 func main() {
@@ -23,14 +24,16 @@ func main() {
 		})))
 	}
 
+	estoria.SetLogger(estoria.DefaultLogger())
+
 	obox := memory.NewOutbox()
 
 	logger := &OutboxLogger{}
-	obox.RegisterHandlers(AccountCreatedEvent{}, logger)
-	obox.RegisterHandlers(AccountDeletedEvent{}, logger)
-	obox.RegisterHandlers(UserAddedEvent{}, logger)
-	obox.RegisterHandlers(UserRemovedEvent{}, logger)
-	obox.RegisterHandlers(BalanceChangedEvent{}, logger)
+	obox.RegisterHandlers(AccountCreatedEvent{}.EventType(), logger)
+	obox.RegisterHandlers(AccountDeletedEvent{}.EventType(), logger)
+	obox.RegisterHandlers(UserAddedEvent{}.EventType(), logger)
+	obox.RegisterHandlers(UserRemovedEvent{}.EventType(), logger)
+	obox.RegisterHandlers(BalanceChangedEvent{}.EventType(), logger)
 
 	outboxProcessor := outbox.NewProcessor(obox)
 	outboxProcessor.RegisterHandlers(logger)
@@ -39,50 +42,61 @@ func main() {
 		panic(err)
 	}
 
-	eventStore := memory.NewEventStore(
+	eventStore, err := memory.NewEventStore(
 		memory.WithOutbox(obox),
 	)
+	if err != nil {
+		panic(err)
+	}
 
-	var aggregateStore aggregatestore.Store[*Account]
-	var err error
+	var aggregateStore aggregatestore.Store[Account]
 
-	aggregateStore, err = aggregatestore.NewEventSourcedStore(eventStore, NewAccount)
+	aggregateStore, err = aggregatestore.NewEventSourcedStore(eventStore, NewAccount, aggregatestore.WithEventTypes(
+		AccountCreatedEvent{},
+		AccountDeletedEvent{},
+		UserAddedEvent{},
+		UserRemovedEvent{},
+		BalanceChangedEvent{},
+	))
 	if err != nil {
 		panic(err)
 	}
 
 	snapshotStore := snapshotstore.NewMemoryStore()
 	snapshotPolicy := snapshotstore.EventCountSnapshotPolicy{N: 8}
-	aggregateStore = aggregatestore.NewSnapshottingStore(aggregateStore, snapshotStore, snapshotPolicy)
+	aggregateStore, err = aggregatestore.NewSnapshottingStore(aggregateStore, NewAccount, snapshotStore, snapshotPolicy)
+	if err != nil {
+		panic(err)
+	}
 
-	hookableStore := aggregatestore.NewHookableStore(aggregateStore)
-	hookableStore.AddHook(aggregatestore.BeforeSave, func(ctx context.Context, aggregate *estoria.Aggregate[*Account]) error {
+	hookableStore, err := aggregatestore.NewHookableStore(aggregateStore)
+	if err != nil {
+		panic(err)
+	}
+	hookableStore.BeforeSave(func(ctx context.Context, aggregate *aggregatestore.Aggregate[Account]) error {
 		slog.Info("before-save aggregate store hook", "aggregate_id", aggregate.ID())
 		return nil
 	})
-	hookableStore.AddHook(aggregatestore.AfterSave, func(ctx context.Context, aggregate *estoria.Aggregate[*Account]) error {
+	hookableStore.AfterSave(func(ctx context.Context, aggregate *aggregatestore.Aggregate[Account]) error {
 		slog.Info("after-save aggregate store hook", "aggregate_id", aggregate.ID())
 		return nil
 	})
 
 	aggregateStore = hookableStore
 
-	aggregate, err := aggregateStore.New(nil)
-	if err != nil {
-		panic(err)
-	}
+	aggregate := aggregatestore.NewAggregate(NewAccount(uuid.Must(uuid.NewV4())), 0)
 
 	fmt.Println("created new account:", aggregate.Entity())
 
 	if err := aggregate.Append(
-		&AccountCreatedEvent{Username: "Leonardo"},
-		&BalanceChangedEvent{Amount: +1000},
-		&UserAddedEvent{Username: "Michalangelo"},
-		&BalanceChangedEvent{Amount: -500},
-		&BalanceChangedEvent{Amount: +250},
-		&UserAddedEvent{Username: "Raphael"},
-		&UserRemovedEvent{Username: "Michalangelo"},
-		&BalanceChangedEvent{Amount: -708},
+		AccountCreatedEvent{Username: "Leonardo"},
+		BalanceChangedEvent{Amount: +1000},
+		UserAddedEvent{Username: "Michalangelo"},
+		BalanceChangedEvent{Amount: -500},
+		BalanceChangedEvent{Amount: +250},
+		UserAddedEvent{Username: "Raphael"},
+		UserRemovedEvent{Username: "Michalangelo"},
+		BalanceChangedEvent{Amount: -708},
 	); err != nil {
 		panic(err)
 	}
@@ -90,6 +104,8 @@ func main() {
 	if err := aggregateStore.Save(ctx, aggregate, aggregatestore.SaveOptions{}); err != nil {
 		panic(err)
 	}
+
+	fmt.Println("saved account:", aggregate.Entity())
 
 	loadedAggregate, err := aggregateStore.Load(ctx, aggregate.ID(), aggregatestore.LoadOptions{})
 	if err != nil {
@@ -105,7 +121,7 @@ func (l OutboxLogger) Name() string {
 	return "logger"
 }
 
-func (l OutboxLogger) Handle(_ context.Context, item outbox.OutboxItem) error {
+func (l OutboxLogger) Handle(_ context.Context, item outbox.Item) error {
 	slog.Info("handling outbox item", "event_id", item.EventID(), "handlers", len(item.Handlers()))
 	return nil
 }
