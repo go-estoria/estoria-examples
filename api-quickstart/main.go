@@ -64,7 +64,7 @@ func main() {
 
 	snapshotStore := snapshotstore.NewMemoryStore()
 	snapshotPolicy := snapshotstore.EventCountSnapshotPolicy{N: 8}
-	aggregateStore, err = aggregatestore.NewSnapshottingStore(aggregateStore, NewAccount, snapshotStore, snapshotPolicy)
+	aggregateStore, err = aggregatestore.NewSnapshottingStore(aggregateStore, snapshotStore, snapshotPolicy)
 	if err != nil {
 		panic(err)
 	}
@@ -84,7 +84,9 @@ func main() {
 
 	aggregateStore = hookableStore
 
-	aggregate := aggregatestore.NewAggregate(NewAccount(uuid.Must(uuid.NewV4())), 0)
+	accountID := uuid.Must(uuid.NewV4())
+
+	aggregate := aggregatestore.NewAggregate(NewAccount(accountID), 0)
 
 	fmt.Println("created new account:", aggregate.Entity())
 
@@ -107,7 +109,7 @@ func main() {
 
 	fmt.Println("saved account:", aggregate.Entity())
 
-	loadedAggregate, err := aggregateStore.Load(ctx, aggregate.ID(), aggregatestore.LoadOptions{})
+	loadedAggregate, err := aggregateStore.Load(ctx, accountID, aggregatestore.LoadOptions{})
 	if err != nil {
 		panic(err)
 	}

@@ -22,6 +22,8 @@ func (e AccountCreatedEvent) ApplyTo(_ context.Context, account Account) (Accoun
 	slog.Info("applying account created event", "username", e.Username)
 	if !account.CreatedAt.IsZero() {
 		return account, fmt.Errorf("account already created")
+	} else if e.CreatedAt.IsZero() {
+		e.CreatedAt = time.Now()
 	}
 
 	account.CreatedAt = e.CreatedAt
@@ -42,6 +44,8 @@ func (e AccountDeletedEvent) ApplyTo(_ context.Context, account Account) (Accoun
 	slog.Info("applying account deleted event", "reason", e.Reason)
 	if account.DeletedAt != nil {
 		return account, fmt.Errorf("account already deleted")
+	} else if e.DeletedAt.IsZero() {
+		e.DeletedAt = time.Now()
 	}
 
 	account.DeletedAt = &e.DeletedAt
