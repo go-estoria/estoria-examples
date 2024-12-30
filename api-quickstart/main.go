@@ -6,11 +6,18 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/go-estoria/estoria"
 	"github.com/go-estoria/estoria/aggregatestore"
-	"github.com/go-estoria/estoria/eventstore/memory"
-	"github.com/go-estoria/estoria/outbox"
 	"github.com/go-estoria/estoria/snapshotstore"
+
+	// "github.com/go-estoria/estoria/eventstore/memory"
+	s3es "github.com/go-estoria/estoria-contrib/aws/s3/eventstore"
+	s3snapshotstore "github.com/go-estoria/estoria-contrib/aws/s3/snapshotstore"
+	"github.com/go-estoria/estoria/outbox"
+
+	// "github.com/go-estoria/estoria/snapshotstore"
 	"github.com/gofrs/uuid/v5"
 )
 
@@ -26,25 +33,37 @@ func main() {
 
 	estoria.SetLogger(estoria.DefaultLogger())
 
-	obox := memory.NewOutbox()
+	// obox := memory.NewOutbox()
 
-	logger := &OutboxLogger{}
-	obox.RegisterHandlers(AccountCreatedEvent{}.EventType(), logger)
-	obox.RegisterHandlers(AccountDeletedEvent{}.EventType(), logger)
-	obox.RegisterHandlers(UserAddedEvent{}.EventType(), logger)
-	obox.RegisterHandlers(UserRemovedEvent{}.EventType(), logger)
-	obox.RegisterHandlers(BalanceChangedEvent{}.EventType(), logger)
+	// logger := &OutboxLogger{}
+	// obox.RegisterHandlers(AccountCreatedEvent{}.EventType(), logger)
+	// obox.RegisterHandlers(AccountDeletedEvent{}.EventType(), logger)
+	// obox.RegisterHandlers(UserAddedEvent{}.EventType(), logger)
+	// obox.RegisterHandlers(UserRemovedEvent{}.EventType(), logger)
+	// obox.RegisterHandlers(BalanceChangedEvent{}.EventType(), logger)
 
-	outboxProcessor := outbox.NewProcessor(obox)
-	outboxProcessor.RegisterHandlers(logger)
+	// outboxProcessor := outbox.NewProcessor(obox)
+	// outboxProcessor.RegisterHandlers(logger)
 
-	if err := outboxProcessor.Start(ctx); err != nil {
+	// if err := outboxProcessor.Start(ctx); err != nil {
+	// 	panic(err)
+	// }
+
+	// configure AWS for local minio server
+	awsConfig, err := config.LoadDefaultConfig(ctx,
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("minio", "minio123", "")),
+		config.WithRegion("us-east-1"),
+	)
+	if err != nil {
 		panic(err)
 	}
 
-	eventStore, err := memory.NewEventStore(
-		memory.WithOutbox(obox),
-	)
+	s3Client, err := s3es.NewDefaultS3Client(ctx, awsConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	eventStore, err := s3es.New(s3Client)
 	if err != nil {
 		panic(err)
 	}
@@ -62,8 +81,8 @@ func main() {
 		panic(err)
 	}
 
-	snapshotStore := snapshotstore.NewMemoryStore()
-	snapshotPolicy := snapshotstore.EventCountSnapshotPolicy{N: 8}
+	snapshotStore := s3snapshotstore.New(s3Client)
+	snapshotPolicy := snapshotstore.EventCountSnapshotPolicy{N: 3}
 	aggregateStore, err = aggregatestore.NewSnapshottingStore(aggregateStore, snapshotStore, snapshotPolicy)
 	if err != nil {
 		panic(err)
