@@ -87,6 +87,7 @@ func main() {
 
 	var aggregateStore aggregatestore.Store[Account]
 
+	// create an event-sourced store to load and save aggregates using the event store
 	aggregateStore, err = aggregatestore.NewEventSourcedStore(eventStore, NewAccount, aggregatestore.WithEventTypes(
 		AccountCreatedEvent{},
 		AccountDeletedEvent{},
@@ -98,6 +99,16 @@ func main() {
 		panic(err)
 	}
 
+	// add instrumentation around the event-sourced store
+	aggregateStore, err = otelstore.NewInstrumentedStore(aggregateStore,
+		otelstore.WithMetricNamespace[Account]("eventsourcedstore"),
+		otelstore.WithTraceNamespace[Account]("eventsourcedstore"),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	// create a snapshot store to save and load snapshots before hitting the event store
 	snapshotStore := s3snapshotstore.New(s3Client)
 	snapshotPolicy := snapshotstore.EventCountSnapshotPolicy{N: 3}
 	aggregateStore, err = aggregatestore.NewSnapshottingStore(aggregateStore, snapshotStore, snapshotPolicy)
@@ -105,6 +116,16 @@ func main() {
 		panic(err)
 	}
 
+	// add instrumentation around the snapshotting store
+	aggregateStore, err = otelstore.NewInstrumentedStore(aggregateStore,
+		otelstore.WithMetricNamespace[Account]("snapshotstore"),
+		otelstore.WithTraceNamespace[Account]("snapshotstore"),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	// add hooks around the snapshotting store
 	hookableStore, err := aggregatestore.NewHookableStore(aggregateStore)
 	if err != nil {
 		panic(err)
@@ -125,15 +146,6 @@ func main() {
 		slog.Info("after-save aggregate store hook", "aggregate_id", aggregate.ID())
 		return nil
 	})
-
-	aggregateStore = hookableStore
-
-	instrumentedStore, err := otelstore.NewInstrumentedStore(aggregateStore)
-	if err != nil {
-		panic(err)
-	}
-
-	aggregateStore = instrumentedStore
 
 	accountID := uuid.Must(uuid.NewV4())
 
