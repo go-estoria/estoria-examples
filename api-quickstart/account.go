@@ -23,7 +23,7 @@ type Account struct {
 	DeletedAt *time.Time
 }
 
-var _ estoria.Entity = (*Account)(nil)
+var _ estoria.Entity = Account{}
 
 func NewAccount(id uuid.UUID) Account {
 	account := Account{
@@ -41,6 +41,6 @@ func (a Account) EntityID() typeid.UUID {
 	return typeid.FromUUID(accountType, a.ID)
 }
 
-func (a *Account) String() string {
+func (a Account) String() string {
 	return fmt.Sprintf("Account %s {Users: %v} Balance: %d", a.ID, a.Users, a.Balance)
 }

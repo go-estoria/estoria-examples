@@ -12,6 +12,7 @@ import (
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/snapshotstore"
 
+	otelstore "github.com/go-estoria/estoria-contrib/opentelemetry/aggregatestore"
 	// "github.com/go-estoria/estoria/eventstore/memory"
 	s3es "github.com/go-estoria/estoria-contrib/aws/s3/eventstore"
 	s3snapshotstore "github.com/go-estoria/estoria-contrib/aws/s3/snapshotstore"
@@ -20,6 +21,8 @@ import (
 	// "github.com/go-estoria/estoria/snapshotstore"
 	"github.com/gofrs/uuid/v5"
 )
+
+const appName = "estoria-api-quickstart"
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -32,6 +35,20 @@ func main() {
 	}
 
 	estoria.SetLogger(estoria.DefaultLogger())
+
+	shutdownTracer := initTracer(ctx, appName)
+	defer func() {
+		if err := shutdownTracer(ctx); err != nil {
+			slog.Error("failed to shutdown tracer", "error", err)
+		}
+	}()
+
+	shutdownMeter := initMeter(ctx, appName)
+	defer func() {
+		if err := shutdownMeter(ctx); err != nil {
+			slog.Error("failed to shutdown meter", "error", err)
+		}
+	}()
 
 	// obox := memory.NewOutbox()
 
@@ -92,6 +109,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	hookableStore.BeforeLoad(func(ctx context.Context, id uuid.UUID) error {
+		slog.Info("before-load aggregate store hook", "aggregate_id", id)
+		return nil
+	})
+	hookableStore.AfterLoad(func(ctx context.Context, aggregate *aggregatestore.Aggregate[Account]) error {
+		slog.Info("after-load aggregate store hook", "aggregate_id", aggregate.ID())
+		return nil
+	})
 	hookableStore.BeforeSave(func(ctx context.Context, aggregate *aggregatestore.Aggregate[Account]) error {
 		slog.Info("before-save aggregate store hook", "aggregate_id", aggregate.ID())
 		return nil
@@ -102,6 +127,13 @@ func main() {
 	})
 
 	aggregateStore = hookableStore
+
+	instrumentedStore, err := otelstore.NewInstrumentedStore(aggregateStore)
+	if err != nil {
+		panic(err)
+	}
+
+	aggregateStore = instrumentedStore
 
 	accountID := uuid.Must(uuid.NewV4())
 
