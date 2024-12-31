@@ -15,6 +15,7 @@ import (
 
 	otelaggregatestore "github.com/go-estoria/estoria-contrib/opentelemetry/aggregatestore"
 	oteleventstore "github.com/go-estoria/estoria-contrib/opentelemetry/eventstore"
+	otelsnapshotstore "github.com/go-estoria/estoria-contrib/opentelemetry/snapshotstore"
 
 	// "github.com/go-estoria/estoria/eventstore/memory"
 	s3es "github.com/go-estoria/estoria-contrib/aws/s3/eventstore"
@@ -120,7 +121,14 @@ func main() {
 	}
 
 	// create a snapshot store to save and load snapshots before hitting the event store
-	snapshotStore := s3snapshotstore.New(s3Client)
+	snapshotStore, err := otelsnapshotstore.NewInstrumentedStore(s3snapshotstore.New(s3Client),
+		otelsnapshotstore.WithMetricNamespace("s3snapshotstore"),
+		otelsnapshotstore.WithTraceNamespace("s3snapshotstore"),
+	)
+	if err != nil {
+		panic(err)
+	}
+
 	snapshotPolicy := snapshotstore.EventCountSnapshotPolicy{N: 3}
 	aggregateStore, err = aggregatestore.NewSnapshottingStore(aggregateStore, snapshotStore, snapshotPolicy)
 	if err != nil {
@@ -129,8 +137,8 @@ func main() {
 
 	// add instrumentation around the snapshotting store
 	aggregateStore, err = otelaggregatestore.NewInstrumentedStore(aggregateStore,
-		otelaggregatestore.WithMetricNamespace[Account]("snapshotstore"),
-		otelaggregatestore.WithTraceNamespace[Account]("snapshotstore"),
+		otelaggregatestore.WithMetricNamespace[Account]("snapshotingstore"),
+		otelaggregatestore.WithTraceNamespace[Account]("snapshotingstore"),
 	)
 	if err != nil {
 		panic(err)
