@@ -137,8 +137,8 @@ func main() {
 
 	// add instrumentation around the snapshotting store
 	aggregateStore, err = otelaggregatestore.NewInstrumentedStore(aggregateStore,
-		otelaggregatestore.WithMetricNamespace[Account]("snapshotingstore"),
-		otelaggregatestore.WithTraceNamespace[Account]("snapshotingstore"),
+		otelaggregatestore.WithMetricNamespace[Account]("snapshottingstore"),
+		otelaggregatestore.WithTraceNamespace[Account]("snapshottingstore"),
 	)
 	if err != nil {
 		panic(err)
