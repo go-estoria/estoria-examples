@@ -10,9 +10,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/go-estoria/estoria"
 	"github.com/go-estoria/estoria/aggregatestore"
+	"github.com/go-estoria/estoria/eventstore"
 	"github.com/go-estoria/estoria/snapshotstore"
 
-	otelstore "github.com/go-estoria/estoria-contrib/opentelemetry/aggregatestore"
+	otelaggregatestore "github.com/go-estoria/estoria-contrib/opentelemetry/aggregatestore"
+	oteleventstore "github.com/go-estoria/estoria-contrib/opentelemetry/eventstore"
+
 	// "github.com/go-estoria/estoria/eventstore/memory"
 	s3es "github.com/go-estoria/estoria-contrib/aws/s3/eventstore"
 	s3snapshotstore "github.com/go-estoria/estoria-contrib/aws/s3/snapshotstore"
@@ -80,7 +83,15 @@ func main() {
 		panic(err)
 	}
 
-	eventStore, err := s3es.New(s3Client)
+	var eventStore eventstore.Store
+
+	eventStore, err = s3es.New(s3Client)
+	if err != nil {
+		panic(err)
+	}
+
+	// add instrumentation around the event store
+	eventStore, err = oteleventstore.NewInstrumentedStore(eventStore)
 	if err != nil {
 		panic(err)
 	}
@@ -100,9 +111,9 @@ func main() {
 	}
 
 	// add instrumentation around the event-sourced store
-	aggregateStore, err = otelstore.NewInstrumentedStore(aggregateStore,
-		otelstore.WithMetricNamespace[Account]("eventsourcedstore"),
-		otelstore.WithTraceNamespace[Account]("eventsourcedstore"),
+	aggregateStore, err = otelaggregatestore.NewInstrumentedStore(aggregateStore,
+		otelaggregatestore.WithMetricNamespace[Account]("eventsourcedstore"),
+		otelaggregatestore.WithTraceNamespace[Account]("eventsourcedstore"),
 	)
 	if err != nil {
 		panic(err)
@@ -117,9 +128,9 @@ func main() {
 	}
 
 	// add instrumentation around the snapshotting store
-	aggregateStore, err = otelstore.NewInstrumentedStore(aggregateStore,
-		otelstore.WithMetricNamespace[Account]("snapshotstore"),
-		otelstore.WithTraceNamespace[Account]("snapshotstore"),
+	aggregateStore, err = otelaggregatestore.NewInstrumentedStore(aggregateStore,
+		otelaggregatestore.WithMetricNamespace[Account]("snapshotstore"),
+		otelaggregatestore.WithTraceNamespace[Account]("snapshotstore"),
 	)
 	if err != nil {
 		panic(err)
