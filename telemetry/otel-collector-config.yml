@@ -1,0 +1,33 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+
+processors:
+  batch: {}
+
+exporters:
+  # Replace the "jaeger" exporter with an "otlp" exporter
+  # that points to the Jaeger container’s gRPC endpoint (14250).
+  otlp:
+    # endpoint: "jaeger:14250"
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp]
+
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]

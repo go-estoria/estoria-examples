@@ -1,0 +1,56 @@
+version: '3.4'
+
+services:
+  # OTEL collector that receives traces and metrics and sends them to Jaeger and Prometheus
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    ports:
+      - "4317:4317" # OTLP gRPC receiver for traces/metrics
+      - "4318:4318" # OTLP HTTP receiver for traces/metrics
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    command: ["--config=/etc/otel-collector-config.yml"]
+    networks:
+      - example-net
+
+  # Jaeger all-in-one for receiving and viewing traces
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686" # Jaeger UI
+      # - "14268:14268" # Collector HTTP endpoint
+      # - "14250:14250" # Collector gRPC endpoint
+    networks:
+      - example-net
+
+  # Prometheus for receiving and viewing metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - example-net
+
+  # Grafana for visualizing traces and metrics
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=secret
+    depends_on:
+      - prometheus
+    networks:
+      - example-net
+
+networks:
+  example-net:
+    driver: bridge

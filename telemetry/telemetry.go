@@ -11,11 +11,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
-	"google.golang.org/grpc"
 )
 
 func initTracer(ctx context.Context, serviceName string) func(context.Context) error {
-	// Create an OTLP gRPC exporter
 	exp, err := otlptracegrpc.New(
 		ctx,
 		otlptracegrpc.WithEndpoint("localhost:4317"),
@@ -39,12 +37,10 @@ func initTracer(ctx context.Context, serviceName string) func(context.Context) e
 }
 
 func initMeter(ctx context.Context, serviceName string) func(context.Context) error {
-	// Create the OTLP/gRPC exporter for metrics
 	exporter, err := otlpmetricgrpc.New(
 		ctx,
 		otlpmetricgrpc.WithEndpoint("localhost:4317"),
 		otlpmetricgrpc.WithInsecure(),
-		otlpmetricgrpc.WithDialOption(grpc.WithBlock()), // optional
 	)
 	if err != nil {
 		log.Fatalf("failed to create metric exporter: %v", err)
