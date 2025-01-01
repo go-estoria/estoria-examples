@@ -6,27 +6,15 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/go-estoria/estoria"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
-	"github.com/go-estoria/estoria/snapshotstore"
-
-	otelaggregatestore "github.com/go-estoria/estoria-contrib/opentelemetry/aggregatestore"
-	oteleventstore "github.com/go-estoria/estoria-contrib/opentelemetry/eventstore"
-	otelsnapshotstore "github.com/go-estoria/estoria-contrib/opentelemetry/snapshotstore"
-
-	// "github.com/go-estoria/estoria/eventstore/memory"
-	s3es "github.com/go-estoria/estoria-contrib/aws/s3/eventstore"
-	s3snapshotstore "github.com/go-estoria/estoria-contrib/aws/s3/snapshotstore"
+	"github.com/go-estoria/estoria/eventstore/memory"
+	memoryes "github.com/go-estoria/estoria/eventstore/memory"
 	"github.com/go-estoria/estoria/outbox"
-
-	// "github.com/go-estoria/estoria/snapshotstore"
+	"github.com/go-estoria/estoria/snapshotstore"
 	"github.com/gofrs/uuid/v5"
 )
-
-const appName = "estoria-api-quickstart"
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -40,59 +28,25 @@ func main() {
 
 	estoria.SetLogger(estoria.DefaultLogger())
 
-	shutdownTracer := initTracer(ctx, appName)
-	defer func() {
-		if err := shutdownTracer(ctx); err != nil {
-			slog.Error("failed to shutdown tracer", "error", err)
-		}
-	}()
+	obox := memory.NewOutbox()
 
-	shutdownMeter := initMeter(ctx, appName)
-	defer func() {
-		if err := shutdownMeter(ctx); err != nil {
-			slog.Error("failed to shutdown meter", "error", err)
-		}
-	}()
+	logger := &OutboxLogger{}
+	obox.RegisterHandlers(AccountCreatedEvent{}.EventType(), logger)
+	obox.RegisterHandlers(AccountDeletedEvent{}.EventType(), logger)
+	obox.RegisterHandlers(UserAddedEvent{}.EventType(), logger)
+	obox.RegisterHandlers(UserRemovedEvent{}.EventType(), logger)
+	obox.RegisterHandlers(BalanceChangedEvent{}.EventType(), logger)
 
-	// obox := memory.NewOutbox()
+	outboxProcessor := outbox.NewProcessor(obox)
+	outboxProcessor.RegisterHandlers(logger)
 
-	// logger := &OutboxLogger{}
-	// obox.RegisterHandlers(AccountCreatedEvent{}.EventType(), logger)
-	// obox.RegisterHandlers(AccountDeletedEvent{}.EventType(), logger)
-	// obox.RegisterHandlers(UserAddedEvent{}.EventType(), logger)
-	// obox.RegisterHandlers(UserRemovedEvent{}.EventType(), logger)
-	// obox.RegisterHandlers(BalanceChangedEvent{}.EventType(), logger)
-
-	// outboxProcessor := outbox.NewProcessor(obox)
-	// outboxProcessor.RegisterHandlers(logger)
-
-	// if err := outboxProcessor.Start(ctx); err != nil {
-	// 	panic(err)
-	// }
-
-	// configure AWS for local minio server
-	awsConfig, err := config.LoadDefaultConfig(ctx,
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("minio", "minio123", "")),
-		config.WithRegion("us-east-1"),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	s3Client, err := s3es.NewDefaultS3Client(ctx, awsConfig)
-	if err != nil {
+	if err := outboxProcessor.Start(ctx); err != nil {
 		panic(err)
 	}
 
 	var eventStore eventstore.Store
 
-	eventStore, err = s3es.New(s3Client)
-	if err != nil {
-		panic(err)
-	}
-
-	// add instrumentation around the event store
-	eventStore, err = oteleventstore.NewInstrumentedStore(eventStore)
+	eventStore, err := memoryes.NewEventStore()
 	if err != nil {
 		panic(err)
 	}
@@ -111,35 +65,11 @@ func main() {
 		panic(err)
 	}
 
-	// add instrumentation around the event-sourced store
-	aggregateStore, err = otelaggregatestore.NewInstrumentedStore(aggregateStore,
-		otelaggregatestore.WithMetricNamespace[Account]("eventsourcedstore"),
-		otelaggregatestore.WithTraceNamespace[Account]("eventsourcedstore"),
-	)
-	if err != nil {
-		panic(err)
-	}
-
 	// create a snapshot store to save and load snapshots before hitting the event store
-	snapshotStore, err := otelsnapshotstore.NewInstrumentedStore(s3snapshotstore.New(s3Client),
-		otelsnapshotstore.WithMetricNamespace("s3snapshotstore"),
-		otelsnapshotstore.WithTraceNamespace("s3snapshotstore"),
-	)
-	if err != nil {
-		panic(err)
-	}
+	snapshotStore := snapshotstore.NewMemoryStore()
 
 	snapshotPolicy := snapshotstore.EventCountSnapshotPolicy{N: 3}
 	aggregateStore, err = aggregatestore.NewSnapshottingStore(aggregateStore, snapshotStore, snapshotPolicy)
-	if err != nil {
-		panic(err)
-	}
-
-	// add instrumentation around the snapshotting store
-	aggregateStore, err = otelaggregatestore.NewInstrumentedStore(aggregateStore,
-		otelaggregatestore.WithMetricNamespace[Account]("snapshottingstore"),
-		otelaggregatestore.WithTraceNamespace[Account]("snapshottingstore"),
-	)
 	if err != nil {
 		panic(err)
 	}
