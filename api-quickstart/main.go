@@ -13,6 +13,7 @@ import (
 	memoryes "github.com/go-estoria/estoria/eventstore/memory"
 	"github.com/go-estoria/estoria/outbox"
 	"github.com/go-estoria/estoria/snapshotstore"
+	memoryss "github.com/go-estoria/estoria/snapshotstore/memory"
 	"github.com/gofrs/uuid/v5"
 )
 
@@ -66,7 +67,7 @@ func main() {
 	}
 
 	// create a snapshot store to save and load snapshots before hitting the event store
-	snapshotStore := snapshotstore.NewMemoryStore()
+	snapshotStore := memoryss.NewSnapshotStore()
 
 	snapshotPolicy := snapshotstore.EventCountSnapshotPolicy{N: 3}
 	aggregateStore, err = aggregatestore.NewSnapshottingStore(aggregateStore, snapshotStore, snapshotPolicy)

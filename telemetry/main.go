@@ -14,6 +14,7 @@ import (
 	"github.com/go-estoria/estoria/eventstore"
 	memoryes "github.com/go-estoria/estoria/eventstore/memory"
 	"github.com/go-estoria/estoria/snapshotstore"
+	memoryss "github.com/go-estoria/estoria/snapshotstore/memory"
 	"github.com/gofrs/uuid/v5"
 )
 
@@ -79,7 +80,7 @@ func main() {
 	}
 
 	// create a snapshot store to save and load snapshots before hitting the event store
-	var snapshotStore snapshotstore.SnapshotStore = snapshotstore.NewMemoryStore()
+	var snapshotStore snapshotstore.SnapshotStore = memoryss.NewSnapshotStore()
 
 	// add instrumentation around the snapshot store
 	snapshotStore, err = otelsnapshotstore.NewInstrumentedStore(snapshotStore)
