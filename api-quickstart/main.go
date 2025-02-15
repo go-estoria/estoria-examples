@@ -2,19 +2,24 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/go-estoria/estoria"
+	postgreses "github.com/go-estoria/estoria-contrib/postgres/eventstore"
+	"github.com/go-estoria/estoria-contrib/postgres/eventstore/strategy"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
 	"github.com/go-estoria/estoria/eventstore/memory"
-	memoryes "github.com/go-estoria/estoria/eventstore/memory"
+
+	// memoryes "github.com/go-estoria/estoria/eventstore/memory"
 	"github.com/go-estoria/estoria/outbox"
 	"github.com/go-estoria/estoria/snapshotstore"
 	memoryss "github.com/go-estoria/estoria/snapshotstore/memory"
 	"github.com/gofrs/uuid/v5"
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -47,10 +52,57 @@ func main() {
 
 	var eventStore eventstore.Store
 
-	eventStore, err := memoryes.NewEventStore()
+	// eventStore, err := memoryes.NewEventStore()
+	// mongoClient, err := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017").SetReplicaSet("rs0"))
+	// if err != nil {
+	// 	panic(err)
+	// }
+	db, err := sql.Open("postgres", "postgres://estoria:estoria@localhost:5432/estoria?sslmode=disable")
 	if err != nil {
 		panic(err)
 	}
+
+	slog.Info("pinging Postgres")
+	if err := db.Ping(); err != nil {
+		panic(err)
+	}
+
+	slog.Info("connected to Postgres")
+
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS events (
+			id BIGSERIAL PRIMARY KEY,
+			stream_id UUID NOT NULL,
+			stream_type VARCHAR(255) NOT NULL,
+			event_id UUID UNIQUE NOT NULL,
+			event_type VARCHAR(255) NOT NULL,
+			stream_offset BIGINT NOT NULL,
+			global_offset BIGINT NOT NULL,
+			timestamp TIMESTAMPTZ NOT NULL,
+			data BYTEA NOT NULL
+		);
+	`); err != nil {
+		panic(err)
+	}
+
+	// strat, err := strategy.NewMultiCollectionStrategy(
+	// 	mongoClient,
+	// 	mongoClient.Database("estoria"),
+	// 	strategy.CollectionPerStreamType(),
+	// )
+	strat, err := strategy.NewSingleTableStrategy(db, "events")
+	if err != nil {
+		panic(err)
+	}
+
+	postgresEventStore, err := postgreses.New(db,
+		postgreses.WithStrategy(strat),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	eventStore = postgresEventStore
 
 	var aggregateStore aggregatestore.Store[Account]
 
@@ -128,6 +180,34 @@ func main() {
 	}
 
 	fmt.Println("loaded account:", loadedAggregate.Entity())
+
+	// fmt.Println("all streams:")
+	// streams, err := postgresEventStore.ListStreams(ctx)
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	// for _, stream := range streams {
+	// 	fmt.Println(stream)
+	// }
+
+	// fmt.Println("all events:")
+	// iter, err := postgresEventStore.ReadAll(ctx, eventstore.ReadStreamOptions{})
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	// proj, err := projection.New(iter)
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	// if _, err := proj.Project(ctx, projection.EventHandlerFunc(func(ctx context.Context, evt *eventstore.Event) error {
+	// 	fmt.Printf("%s @%d %s %s\n", evt.StreamID, evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.TypeName())
+	// 	return nil
+	// })); err != nil {
+	// 	panic(err)
+	// }
 }
 
 type OutboxLogger struct{}
