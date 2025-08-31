@@ -10,16 +10,9 @@ import (
 
 	"github.com/go-estoria/estoria"
 	pgeventstore "github.com/go-estoria/estoria-contrib/postgres/eventstore"
-	"github.com/go-estoria/estoria-contrib/postgres/eventstore/strategy"
-	pgoutbox "github.com/go-estoria/estoria-contrib/postgres/outbox"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
 	"github.com/go-estoria/estoria/eventstore/projection"
-
-	// memoryes "github.com/go-estoria/estoria/eventstore/memory"
-	"github.com/go-estoria/estoria/outbox"
-	// "github.com/go-estoria/estoria/snapshotstore"
-	// memoryss "github.com/go-estoria/estoria/snapshotstore/memory"
 	"github.com/gofrs/uuid/v5"
 	_ "github.com/lib/pq"
 )
@@ -36,32 +29,7 @@ func main() {
 
 	estoria.SetLogger(estoria.DefaultLogger())
 
-	obox, err := pgoutbox.New("outbox")
-	if err != nil {
-		panic(err)
-	}
-
-	// logger := &OutboxLogger{}
-	// obox.RegisterHandlers(AccountCreatedEvent{}.EventType(), logger)
-	// obox.RegisterHandlers(AccountDeletedEvent{}.EventType(), logger)
-	// obox.RegisterHandlers(UserAddedEvent{}.EventType(), logger)
-	// obox.RegisterHandlers(UserRemovedEvent{}.EventType(), logger)
-	// obox.RegisterHandlers(BalanceChangedEvent{}.EventType(), logger)
-
-	// outboxProcessor := outbox.NewProcessor(obox)
-	// outboxProcessor.RegisterHandlers(logger)
-
-	// if err := outboxProcessor.Start(ctx); err != nil {
-	// 	panic(err)
-	// }
-
-	var eventStore eventstore.Store
-
-	// eventStore, err := memoryes.NewEventStore()
-	// mongoClient, err := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017").SetReplicaSet("rs0"))
-	// if err != nil {
-	// 	panic(err)
-	// }
+	// establish a database connection
 	db, err := sql.Open("postgres", "postgres://estoria:estoria@localhost:5432/estoria?sslmode=disable")
 	if err != nil {
 		panic(err)
@@ -74,6 +42,7 @@ func main() {
 
 	slog.Info("connected to Postgres")
 
+	// create the events table
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS events (
 			id BIGSERIAL PRIMARY KEY,
@@ -90,42 +59,10 @@ func main() {
 		panic(err)
 	}
 
-	if obox != nil {
-		if _, err := db.ExecContext(ctx, `
-			CREATE TABLE IF NOT EXISTS outbox (
-				id BIGSERIAL PRIMARY KEY,
-				stream_id UUID NOT NULL,
-				stream_type VARCHAR(255) NOT NULL,
-				event_id UUID UNIQUE NOT NULL,
-				event_type VARCHAR(255) NOT NULL,
-				stream_offset BIGINT NOT NULL,
-				timestamp TIMESTAMPTZ NOT NULL,
-				data BYTEA NOT NULL
-			);
-		`); err != nil {
-			panic(err)
-		}
-	}
-
-	// strat, err := strategy.NewMultiCollectionStrategy(
-	// 	mongoClient,
-	// 	mongoClient.Database("estoria"),
-	// 	strategy.CollectionPerStreamType(),
-	// )
-	strat, err := strategy.NewSingleTableStrategy(db, "events")
+	eventStore, err := pgeventstore.New(db)
 	if err != nil {
 		panic(err)
 	}
-
-	postgresEventStore, err := pgeventstore.New(db,
-		pgeventstore.WithStrategy(strat),
-		pgeventstore.WithOutbox(obox),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	eventStore = postgresEventStore
 
 	var aggregateStore aggregatestore.Store[Account]
 
@@ -141,43 +78,13 @@ func main() {
 		panic(err)
 	}
 
-	// // create a snapshot store to save and load snapshots before hitting the event store
-	// snapshotStore := memoryss.NewSnapshotStore()
-
-	// snapshotPolicy := snapshotstore.EventCountSnapshotPolicy{N: 3}
-	// aggregateStore, err = aggregatestore.NewSnapshottingStore(aggregateStore, snapshotStore, snapshotPolicy)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// add hooks around the snapshotting store
-	hookableStore, err := aggregatestore.NewHookableStore(aggregateStore)
-	if err != nil {
-		panic(err)
-	}
-	hookableStore.BeforeLoad(func(ctx context.Context, id uuid.UUID) error {
-		slog.Info("before-load aggregate store hook", "aggregate_id", id)
-		return nil
-	})
-	hookableStore.AfterLoad(func(ctx context.Context, aggregate *aggregatestore.Aggregate[Account]) error {
-		slog.Info("after-load aggregate store hook", "aggregate_id", aggregate.ID())
-		return nil
-	})
-	hookableStore.BeforeSave(func(ctx context.Context, aggregate *aggregatestore.Aggregate[Account]) error {
-		slog.Info("before-save aggregate store hook", "aggregate_id", aggregate.ID())
-		return nil
-	})
-	hookableStore.AfterSave(func(ctx context.Context, aggregate *aggregatestore.Aggregate[Account]) error {
-		slog.Info("after-save aggregate store hook", "aggregate_id", aggregate.ID())
-		return nil
-	})
-
+	// create a new Account aggregate
 	accountID := uuid.Must(uuid.NewV4())
-
 	aggregate := aggregatestore.NewAggregate(NewAccount(accountID), 0)
 
 	fmt.Println("created new account:", aggregate.Entity())
 
+	// append some events to the aggregate
 	if err := aggregate.Append(
 		AccountCreatedEvent{Username: "Leonardo"},
 		BalanceChangedEvent{Amount: +1000},
@@ -191,12 +98,14 @@ func main() {
 		panic(err)
 	}
 
+	// save the aggregate
 	if err := aggregateStore.Save(ctx, aggregate, aggregatestore.SaveOptions{}); err != nil {
 		panic(err)
 	}
 
 	fmt.Println("saved account:", aggregate.Entity())
 
+	// load the aggregate
 	loadedAggregate, err := aggregateStore.Load(ctx, accountID, aggregatestore.LoadOptions{})
 	if err != nil {
 		panic(err)
@@ -204,8 +113,13 @@ func main() {
 
 	fmt.Println("loaded account:", loadedAggregate.Entity())
 
+	//
+	// the below demonstrates some lower-level event store operations
+	//
+
+	// list all streams in the event store
 	fmt.Println("all streams:")
-	streams, err := postgresEventStore.ListStreams(ctx)
+	streams, err := eventStore.ListStreams(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -214,32 +128,24 @@ func main() {
 		fmt.Println(stream)
 	}
 
+	// list all events in the event store
 	fmt.Println("all events:")
-	iter, err := postgresEventStore.ReadAll(ctx, eventstore.ReadStreamOptions{})
+	iter, err := eventStore.ReadAll(ctx, eventstore.ReadStreamOptions{})
 	if err != nil {
 		panic(err)
 	}
 
+	// create a projection using the event iterator
 	proj, err := projection.New(iter)
 	if err != nil {
 		panic(err)
 	}
 
+	// run the projection, printing a line for each event
 	if _, err := proj.Project(ctx, projection.EventHandlerFunc(func(ctx context.Context, evt *eventstore.Event) error {
 		fmt.Printf("%s @%d %s %s\n", evt.StreamID, evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.TypeName())
 		return nil
 	})); err != nil {
 		panic(err)
 	}
-}
-
-type OutboxLogger struct{}
-
-func (l OutboxLogger) Name() string {
-	return "logger"
-}
-
-func (l OutboxLogger) Handle(_ context.Context, item outbox.Item) error {
-	slog.Info("handling outbox item", "event_id", item.EventID(), "handlers", len(item.Handlers()))
-	return nil
 }
