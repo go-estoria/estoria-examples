@@ -1,0 +1,172 @@
+version: '3.4'
+
+services:
+  example-app:
+    build:
+      context: .
+      dockerfile: ./example/Dockerfile
+    container_name: example-app
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - EVENTSTOREDB_URI=esdb://eventstoredb:2113?tls=false
+      - EVENTSTOREDB_USERNAME=admin
+      - EVENTSTOREDB_PASSWORD=changeit
+    networks:
+      - example-net
+    volumes:
+      - .:/repo
+
+  eventstoredb:
+    image: eventstore/eventstore:lts
+    container_name: eventstoredb
+    environment:
+      - EVENTSTORE_CLUSTER_SIZE=1
+      - EVENTSTORE_RUN_PROJECTIONS=All
+      - EVENTSTORE_START_STANDARD_PROJECTIONS=true
+      - EVENTSTORE_EXT_TCP_PORT=1113
+      - EVENTSTORE_HTTP_PORT=2113
+      - EVENTSTORE_INSECURE=true
+      - EVENTSTORE_ENABLE_EXTERNAL_TCP=true
+      - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
+    ports:
+      - "1113:1113"
+      - "2113:2113"
+    networks:
+      - example-net
+    volumes:
+      - esdb_data:/var/lib/eventstore
+
+  mongo:
+    image: mongo:7.0
+    container_name: mongo
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    environment:
+      MONGODB_REPLICA_SET_MODE: primary
+      ALLOW_EMPTY_PASSWORD: "yes"
+    ports:
+      - "27017:27017"
+    extra_hosts:
+      - "localhost:host-gateway"
+    healthcheck:
+      test: echo "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}) }" | mongosh --port 27017 --quiet
+      interval: 5s
+      timeout: 30s
+      start_period: 0s
+      start_interval: 1s
+      retries: 30
+    networks:
+      - example-net
+    volumes:
+      - "mongo1_data:/data/db"
+      - "mongo1_config:/data/configdb"
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mongo-express
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+    ports:
+      - "8888:8081"
+    depends_on:
+      - mongo
+    networks:
+      - example-net
+
+  s3:
+    image: minio/minio
+    container_name: s3
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_DEFAULT_BUCKETS: events
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - example-net
+    volumes:
+      - s3_data:/data
+      - s3_config:/root/.minio
+  
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - example-net
+  
+  valkey:
+    image: valkey/valkey:latest
+    command: valkey-server --port 6380 --requirepass valkey
+    ports:
+      - "6380:6380"
+    volumes:
+      - valkey_data:/data
+    networks:
+      - example-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    ports:
+      - "4317:4317" # OTLP gRPC receiver for traces/metrics
+      - "4318:4318" # OTLP HTTP receiver for traces/metrics
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    command: ["--config=/etc/otel-collector-config.yml"]
+    networks:
+      - example-net
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686" # Jaeger UI
+      # - "14268:14268" # Collector HTTP endpoint
+      # - "14250:14250" # Collector gRPC endpoint
+    networks:
+      - example-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - example-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=secret
+    depends_on:
+      - prometheus
+    networks:
+      - example-net
+
+networks:
+  example-net:
+    driver: bridge
+
+volumes:
+  esdb_data:
+    driver: local
+  s3_data:
+    driver: local
+  s3_config:
+    driver: local
+  valkey_data:
+    driver: local
+  mongo1_data:
+  mongo1_config:
