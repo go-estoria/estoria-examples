@@ -28,20 +28,18 @@ func main() {
 		})))
 	}
 
+	// the logger defaults to slog but can be adapted as needed
 	estoria.SetLogger(estoria.DefaultLogger())
 
 	// establish a database connection
 	db, err := sql.Open("postgres", "postgres://estoria:estoria@localhost:5432/estoria?sslmode=disable")
 	check(err)
 
-	slog.Info("pinging Postgres")
 	if err := db.Ping(); err != nil {
 		panic(err)
 	}
 
-	slog.Info("connected to Postgres")
-
-	// grab a reference to the default strategy so we can auto-create the schema
+	// the default strategy uses a single table for all events and a metadata table for tracking offsets
 	strategy, _ := pgstrategy.NewDefaultStrategy()
 	if _, err := db.ExecContext(ctx, strategy.Schema()); err != nil {
 		panic(err)
