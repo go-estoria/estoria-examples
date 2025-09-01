@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-estoria/estoria"
 	pgeventstore "github.com/go-estoria/estoria-contrib/postgres/eventstore"
+	pgstrategy "github.com/go-estoria/estoria-contrib/postgres/eventstore/strategy"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
 	"github.com/go-estoria/estoria/eventstore/projection"
@@ -31,9 +32,7 @@ func main() {
 
 	// establish a database connection
 	db, err := sql.Open("postgres", "postgres://estoria:estoria@localhost:5432/estoria?sslmode=disable")
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	slog.Info("pinging Postgres")
 	if err := db.Ping(); err != nil {
@@ -42,27 +41,14 @@ func main() {
 
 	slog.Info("connected to Postgres")
 
-	// create the events table
-	if _, err := db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS events (
-			id BIGSERIAL PRIMARY KEY,
-			stream_id UUID NOT NULL,
-			stream_type VARCHAR(255) NOT NULL,
-			event_id UUID UNIQUE NOT NULL,
-			event_type VARCHAR(255) NOT NULL,
-			stream_offset BIGINT NOT NULL,
-			global_offset BIGINT NOT NULL,
-			timestamp TIMESTAMPTZ NOT NULL,
-			data BYTEA NOT NULL
-		);
-	`); err != nil {
+	// grab a reference to the default strategy so we can auto-create the schema
+	strategy, _ := pgstrategy.NewDefaultStrategy()
+	if _, err := db.ExecContext(ctx, strategy.Schema()); err != nil {
 		panic(err)
 	}
 
-	eventStore, err := pgeventstore.New(db)
-	if err != nil {
-		panic(err)
-	}
+	eventStore, err := pgeventstore.New(db, pgeventstore.WithStrategy(strategy))
+	check(err)
 
 	var aggregateStore aggregatestore.Store[Account]
 
@@ -74,9 +60,7 @@ func main() {
 		UserRemovedEvent{},
 		BalanceChangedEvent{},
 	))
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	// create a new Account aggregate
 	accountID := uuid.Must(uuid.NewV4())
@@ -107,9 +91,7 @@ func main() {
 
 	// load the aggregate
 	loadedAggregate, err := aggregateStore.Load(ctx, accountID, aggregatestore.LoadOptions{})
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	fmt.Println("loaded account:", loadedAggregate.Entity())
 
@@ -117,35 +99,25 @@ func main() {
 	// the below demonstrates some lower-level event store operations
 	//
 
-	// list all streams in the event store
-	fmt.Println("all streams:")
-	streams, err := eventStore.ListStreams(ctx)
-	if err != nil {
-		panic(err)
-	}
-
-	for _, stream := range streams {
-		fmt.Println(stream)
-	}
-
-	// list all events in the event store
-	fmt.Println("all events:")
-	iter, err := eventStore.ReadAll(ctx, eventstore.ReadStreamOptions{})
-	if err != nil {
-		panic(err)
-	}
+	// create an iterator to read events from a specific stream
+	iter, err := eventStore.ReadStream(ctx, aggregate.ID(), eventstore.ReadStreamOptions{})
+	check(err)
 
 	// create a projection using the event iterator
 	proj, err := projection.New(iter)
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
-	// run the projection, printing a line for each event
-	if _, err := proj.Project(ctx, projection.EventHandlerFunc(func(ctx context.Context, evt *eventstore.Event) error {
+	// run the projection, simply printing a line for each event
+	fmt.Printf("events in stream %s:\n", aggregate.ID())
+	_, err = proj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
 		fmt.Printf("%s @%d %s %s\n", evt.StreamID, evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.TypeName())
 		return nil
-	})); err != nil {
+	}))
+	check(err)
+}
+
+func check(err error) {
+	if err != nil {
 		panic(err)
 	}
 }
