@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/go-estoria/estoria"
@@ -22,6 +23,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if slices.ContainsFunc(os.Args, func(s string) bool { return s == "-h" || s == "--help" }) {
+		fmt.Fprintf(os.Stderr, "usage: %s [postgres-dsn]\n", os.Args[0])
+		os.Exit(0)
+	}
+
 	if os.Getenv("DEBUG") != "" {
 		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 			Level: slog.LevelDebug,
@@ -31,8 +37,15 @@ func main() {
 	// the logger defaults to slog but can be adapted as needed
 	estoria.SetLogger(estoria.DefaultLogger())
 
+	// default if using 'make up' to spin up Postgres locally
+	dsn := "postgres://estoria:estoria@localhost:5432/estoria?sslmode=disable"
+	// otherwise just pass a DSN as the first argument to this program
+	if len(os.Args) == 2 {
+		dsn = os.Args[1]
+	}
+
 	// establish a database connection
-	db, err := sql.Open("postgres", "postgres://estoria:estoria@localhost:5432/estoria?sslmode=disable")
+	db, err := sql.Open("postgres", dsn)
 	check(err)
 
 	if err := db.Ping(); err != nil {
