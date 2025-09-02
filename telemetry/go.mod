@@ -1,6 +1,6 @@
 module github.com/go-estoria/estoria-examples/api-quickstart
 
-go 1.23.4
+go 1.25.0
 
 replace github.com/go-estoria/estoria => ../../estoria
 

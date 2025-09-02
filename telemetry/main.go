@@ -62,7 +62,7 @@ func main() {
 
 	// create an event-sourced aggregate store to load and save aggregates using the event store
 	var aggregateStore aggregatestore.Store[Account]
-	aggregateStore, err = aggregatestore.NewEventSourcedStore(eventStore, NewAccount, aggregatestore.WithEventTypes(
+	aggregateStore, err = aggregatestore.New(eventStore, NewAccount, aggregatestore.WithEventTypes(
 		AccountCreatedEvent{},
 		AccountDeletedEvent{},
 		UserAddedEvent{},
