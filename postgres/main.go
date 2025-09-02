@@ -113,6 +113,14 @@ func main() {
 	}))
 	check(err)
 
+	// some event stores, such as this one, support listing streams
+	streams, err := eventStore.ListStreams()
+	check(err)
+	fmt.Println("all streams in event store:")
+	for _, stream := range streams {
+		fmt.Printf("- %s @%d\n", stream.StreamID, stream.LastOffset)
+	}
+
 	// some event stores, such as this one, support reading all events in the store
 	allIter, err := eventStore.ReadAll(ctx, eventstore.ReadStreamOptions{})
 	check(err)
