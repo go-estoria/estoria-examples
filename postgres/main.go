@@ -112,6 +112,23 @@ func main() {
 		return nil
 	}))
 	check(err)
+
+	// some event stores, such as this one, support reading all events in the store
+	allIter, err := eventStore.ReadAll(ctx, eventstore.ReadStreamOptions{})
+	check(err)
+
+	// create a projection using the "all events" iterator
+	allProj, err := projection.New(allIter)
+	check(err)
+
+	// run the projection, simply incrementing a counter then printing the total
+	count := 0
+	_, err = allProj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
+		count++
+		return nil
+	}))
+	fmt.Println("total events in event store:", count)
+	check(err)
 }
 
 func check(err error) {
