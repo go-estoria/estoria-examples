@@ -77,7 +77,7 @@ func main() {
 	accountID := uuid.Must(uuid.NewV4())
 	aggregate := aggregatestore.NewAggregate(NewAccount(accountID), 0)
 
-	fmt.Println("created new account:", aggregate.Entity())
+	fmt.Printf("created new account:\n  %s\n", aggregate.Entity())
 
 	// append some events to the aggregate
 	if err := aggregate.Append(
@@ -98,13 +98,13 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("saved account:", aggregate.Entity())
+	fmt.Printf("saved account:\n  %s\n", aggregate.Entity())
 
 	// load the aggregate
 	loadedAggregate, err := aggregateStore.Load(ctx, accountID, nil)
 	check(err)
 
-	fmt.Println("loaded account:", loadedAggregate.Entity())
+	fmt.Printf("loaded account:\n  %s\n", loadedAggregate.Entity())
 
 	//
 	// the below demonstrates some lower-level event store operations
@@ -119,9 +119,10 @@ func main() {
 	check(err)
 
 	// run the projection, simply printing a line for each event
+	fmt.Println()
 	fmt.Printf("events in stream %s:\n", aggregate.ID())
 	_, err = proj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
-		fmt.Printf("%s @%d %s %s\n", evt.StreamID, evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.Type)
+		fmt.Printf("  %s @%d %s %s\n", evt.StreamID.ShortString(), evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.Type)
 		return nil
 	}))
 	check(err)
@@ -129,12 +130,13 @@ func main() {
 	// some event stores, such as this one, support listing streams
 	streams, err := eventStore.ListStreams()
 	check(err)
+	fmt.Println()
 	fmt.Println("all streams in event store:")
 	for _, stream := range streams {
-		fmt.Printf("- %s @%d\n", stream.StreamID, stream.LastOffset)
+		fmt.Printf("  %s @%d\n", stream.StreamID.ShortString(), stream.LastOffset)
 	}
 
-	// some event stores, such as this one, support reading all events in the store
+	// some event stores, such as this one, support reading all events in the store (global ordering)
 	allIter, err := eventStore.ReadAll(ctx, eventstore.ReadStreamOptions{})
 	check(err)
 
@@ -142,13 +144,13 @@ func main() {
 	allProj, err := projection.New(allIter)
 	check(err)
 
-	// run the projection, simply incrementing a counter then printing the total
-	count := 0
+	// run the projection
+	fmt.Println()
+	fmt.Println("all events in event store:")
 	_, err = allProj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
-		count++
+		fmt.Printf("  %s @%d %s\n", evt.StreamID.ShortString(), evt.StreamVersion, evt.ID.ShortString())
 		return nil
 	}))
-	fmt.Println("total events in event store:", count)
 	check(err)
 }
 
