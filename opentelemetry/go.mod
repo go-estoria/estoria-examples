@@ -1,4 +1,4 @@
-module github.com/go-estoria/estoria-examples/api-quickstart
+module github.com/go-estoria/estoria-examples/telemetry
 
 go 1.25.0
 
@@ -9,7 +9,7 @@ replace github.com/go-estoria/estoria-contrib => ../../estoria-contrib
 require (
 	github.com/go-estoria/estoria v0.1.6
 	github.com/go-estoria/estoria-contrib v0.0.0-20240820023448-393def4bafcd
-	github.com/gofrs/uuid/v5 v5.2.0
+	github.com/gofrs/uuid/v5 v5.3.2
 	go.opentelemetry.io/otel v1.33.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.33.0
 	go.opentelemetry.io/otel/sdk v1.33.0
