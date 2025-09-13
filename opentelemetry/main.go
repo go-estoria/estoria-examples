@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/go-estoria/estoria"
 	otelaggregatestore "github.com/go-estoria/estoria-contrib/opentelemetry/aggregatestore"
@@ -13,6 +14,7 @@ import (
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
 	memoryes "github.com/go-estoria/estoria/eventstore/memory"
+	"github.com/go-estoria/estoria/eventstore/projection"
 	"github.com/go-estoria/estoria/snapshotstore"
 	memoryss "github.com/go-estoria/estoria/snapshotstore/memory"
 	"github.com/gofrs/uuid/v5"
@@ -112,6 +114,7 @@ func main() {
 
 	fmt.Println("created new account:", aggregate.Entity())
 
+	// append some events to the aggregate
 	if err := aggregate.Append(
 		AccountCreatedEvent{Username: "Leonardo"},
 		BalanceChangedEvent{Amount: +1000},
@@ -125,16 +128,43 @@ func main() {
 		panic(err)
 	}
 
+	// save the aggregate
 	if err := aggregateStore.Save(ctx, aggregate, nil); err != nil {
 		panic(err)
 	}
 
-	fmt.Println("saved account:", aggregate.Entity())
+	fmt.Printf("saved account:\n  %s\n", aggregate.Entity())
 
+	// load the aggregate
 	loadedAggregate, err := aggregateStore.Load(ctx, accountID, nil)
+	check(err)
+
+	fmt.Printf("loaded account:\n  %s\n", loadedAggregate.Entity())
+
+	//
+	// the below demonstrates some lower-level event store operations
+	//
+
+	// create an iterator to read events from a specific stream
+	iter, err := eventStore.ReadStream(ctx, aggregate.ID(), eventstore.ReadStreamOptions{})
+	check(err)
+
+	// create a projection using the event iterator
+	proj, err := projection.New(iter)
+	check(err)
+
+	// run the projection, simply printing a line for each event
+	fmt.Println()
+	fmt.Printf("events in stream %s:\n", aggregate.ID())
+	_, err = proj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
+		fmt.Printf("  %s @%d %s %s\n", evt.StreamID.ShortString(), evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.Type)
+		return nil
+	}))
+	check(err)
+}
+
+func check(err error) {
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Println("loaded account:", loadedAggregate.Entity())
 }
