@@ -94,14 +94,14 @@ func main() {
 	}
 
 	// save the aggregate
-	if err := aggregateStore.Save(ctx, aggregate, aggregatestore.SaveOptions{}); err != nil {
+	if err := aggregateStore.Save(ctx, aggregate, nil); err != nil {
 		panic(err)
 	}
 
 	fmt.Println("saved account:", aggregate.Entity())
 
 	// load the aggregate
-	loadedAggregate, err := aggregateStore.Load(ctx, accountID, aggregatestore.LoadOptions{})
+	loadedAggregate, err := aggregateStore.Load(ctx, accountID, nil)
 	check(err)
 
 	fmt.Println("loaded account:", loadedAggregate.Entity())

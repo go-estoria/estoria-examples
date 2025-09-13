@@ -125,13 +125,13 @@ func main() {
 		panic(err)
 	}
 
-	if err := aggregateStore.Save(ctx, aggregate, aggregatestore.SaveOptions{}); err != nil {
+	if err := aggregateStore.Save(ctx, aggregate, nil); err != nil {
 		panic(err)
 	}
 
 	fmt.Println("saved account:", aggregate.Entity())
 
-	loadedAggregate, err := aggregateStore.Load(ctx, accountID, aggregatestore.LoadOptions{})
+	loadedAggregate, err := aggregateStore.Load(ctx, accountID, nil)
 	if err != nil {
 		panic(err)
 	}
