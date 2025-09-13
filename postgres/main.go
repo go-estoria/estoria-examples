@@ -121,7 +121,7 @@ func main() {
 	// run the projection, simply printing a line for each event
 	fmt.Printf("events in stream %s:\n", aggregate.ID())
 	_, err = proj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
-		fmt.Printf("%s @%d %s %s\n", evt.StreamID, evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.TypeName())
+		fmt.Printf("%s @%d %s %s\n", evt.StreamID, evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.Type)
 		return nil
 	}))
 	check(err)

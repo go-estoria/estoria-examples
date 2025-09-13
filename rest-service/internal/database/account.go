@@ -34,7 +34,7 @@ var _ estoria.Entity = (*Account)(nil)
 // Estoria uses this function to create new instances of the entity when
 // creating new aggregates and loading existing aggregates from the event store.
 func NewAccount() *Account {
-	tid, err := typeid.NewUUID(accountType)
+	tid, err := typeid.NewV4(accountType)
 	if err != nil {
 		panic(err)
 	}
@@ -49,13 +49,13 @@ func NewAccount() *Account {
 
 // EntityID returns the ID of the entity.
 // Satifies the estoria.Entity interface.
-func (a *Account) EntityID() typeid.UUID {
-	return typeid.FromUUID(accountType, a.ID)
+func (a *Account) EntityID() typeid.ID {
+	return typeid.New(accountType, a.ID)
 }
 
 // SetEntityID sets the ID of the entity.
 // Satifies the estoria.Entity interface.
-func (a *Account) SetEntityID(id typeid.UUID) {
+func (a *Account) SetEntityID(id typeid.ID) {
 	a.ID = id.UUID()
 }
 

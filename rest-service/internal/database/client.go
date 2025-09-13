@@ -49,7 +49,7 @@ func (c *Client) CreateAccount(ctx context.Context, initialUser string) (*Accoun
 
 // GetAccount retrieves an account by its ID.
 func (c *Client) GetAccount(ctx context.Context, accountID uuid.UUID) (*Account, error) {
-	aggregateID := typeid.FromUUID(accountType, accountID)
+	aggregateID := typeid.New(accountType, accountID)
 	aggregate, err := c.accounts.Load(ctx, aggregateID, aggregatestore.LoadOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("loading aggregate: %w", err)
@@ -60,7 +60,7 @@ func (c *Client) GetAccount(ctx context.Context, accountID uuid.UUID) (*Account,
 
 // DeleteAccount deletes an account by its ID.
 func (c *Client) DeleteAccount(ctx context.Context, accountID uuid.UUID, reason string) error {
-	aggregateID := typeid.FromUUID(accountType, accountID)
+	aggregateID := typeid.New(accountType, accountID)
 	aggregate, err := c.accounts.Load(ctx, aggregateID, aggregatestore.LoadOptions{})
 	if err != nil {
 		return fmt.Errorf("loading aggregate: %w", err)

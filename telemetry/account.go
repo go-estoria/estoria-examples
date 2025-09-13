@@ -34,8 +34,8 @@ func NewAccount(id uuid.UUID) Account {
 	return account
 }
 
-func (a Account) EntityID() typeid.UUID {
-	return typeid.FromUUID(accountType, a.ID)
+func (a Account) EntityID() typeid.ID {
+	return typeid.New(accountType, a.ID)
 }
 
 func (a Account) String() string {

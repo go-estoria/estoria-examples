@@ -38,8 +38,8 @@ func NewAccount(id uuid.UUID) Account {
 }
 
 // EntityID returns the unique typed UUID for this entity.
-func (a Account) EntityID() typeid.UUID {
-	return typeid.FromUUID("account", a.ID)
+func (a Account) EntityID() typeid.ID {
+	return typeid.New("account", a.ID)
 }
 
 // String implements the fmt.Stringer interface for easy printing.
