@@ -83,13 +83,13 @@ func main() {
 	// append some events to the aggregate
 	if err := aggregate.Append(
 		AccountCreatedEvent{Username: "Leonardo"},
-		BalanceChangedEvent{Amount: +1000},
+		BalanceChangedEvent{Amount: +1000, ChangedAt: time.Now().UTC()},
 		UserAddedEvent{Username: "Michalangelo"},
-		BalanceChangedEvent{Amount: -500},
-		BalanceChangedEvent{Amount: +250},
+		BalanceChangedEvent{Amount: -500, ChangedAt: time.Now().UTC()},
+		BalanceChangedEvent{Amount: +250, ChangedAt: time.Now().UTC()},
 		UserAddedEvent{Username: "Raphael"},
 		UserRemovedEvent{Username: "Michalangelo"},
-		BalanceChangedEvent{Amount: -708},
+		BalanceChangedEvent{Amount: -708, ChangedAt: time.Now().UTC()},
 	); err != nil {
 		panic(err)
 	}
