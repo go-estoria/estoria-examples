@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/go-estoria/estoria"
 	otelaggregatestore "github.com/go-estoria/estoria-contrib/opentelemetry/aggregatestore"
@@ -13,7 +14,9 @@ import (
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
 	memoryes "github.com/go-estoria/estoria/eventstore/memory"
+	"github.com/go-estoria/estoria/eventstore/projection"
 	"github.com/go-estoria/estoria/snapshotstore"
+	memoryss "github.com/go-estoria/estoria/snapshotstore/memory"
 	"github.com/gofrs/uuid/v5"
 )
 
@@ -61,7 +64,7 @@ func main() {
 
 	// create an event-sourced aggregate store to load and save aggregates using the event store
 	var aggregateStore aggregatestore.Store[Account]
-	aggregateStore, err = aggregatestore.NewEventSourcedStore(eventStore, NewAccount, aggregatestore.WithEventTypes(
+	aggregateStore, err = aggregatestore.New(eventStore, NewAccount, aggregatestore.WithEventTypes(
 		AccountCreatedEvent{},
 		AccountDeletedEvent{},
 		UserAddedEvent{},
@@ -79,7 +82,7 @@ func main() {
 	}
 
 	// create a snapshot store to save and load snapshots before hitting the event store
-	var snapshotStore snapshotstore.SnapshotStore = snapshotstore.NewMemoryStore()
+	var snapshotStore snapshotstore.SnapshotStore = memoryss.NewSnapshotStore()
 
 	// add instrumentation around the snapshot store
 	snapshotStore, err = otelsnapshotstore.NewInstrumentedStore(snapshotStore)
@@ -111,29 +114,57 @@ func main() {
 
 	fmt.Println("created new account:", aggregate.Entity())
 
+	// append some events to the aggregate
 	if err := aggregate.Append(
 		AccountCreatedEvent{Username: "Leonardo"},
-		BalanceChangedEvent{Amount: +1000},
+		BalanceChangedEvent{Amount: +1000, ChangedAt: time.Now().UTC()},
 		UserAddedEvent{Username: "Michalangelo"},
-		BalanceChangedEvent{Amount: -500},
-		BalanceChangedEvent{Amount: +250},
+		BalanceChangedEvent{Amount: -500, ChangedAt: time.Now().UTC()},
+		BalanceChangedEvent{Amount: +250, ChangedAt: time.Now().UTC()},
 		UserAddedEvent{Username: "Raphael"},
 		UserRemovedEvent{Username: "Michalangelo"},
-		BalanceChangedEvent{Amount: -708},
+		BalanceChangedEvent{Amount: -708, ChangedAt: time.Now().UTC()},
 	); err != nil {
 		panic(err)
 	}
 
-	if err := aggregateStore.Save(ctx, aggregate, aggregatestore.SaveOptions{}); err != nil {
+	// save the aggregate
+	if err := aggregateStore.Save(ctx, aggregate, nil); err != nil {
 		panic(err)
 	}
 
-	fmt.Println("saved account:", aggregate.Entity())
+	fmt.Printf("saved account:\n  %s\n", aggregate.Entity())
 
-	loadedAggregate, err := aggregateStore.Load(ctx, accountID, aggregatestore.LoadOptions{})
+	// load the aggregate
+	loadedAggregate, err := aggregateStore.Load(ctx, accountID, nil)
+	check(err)
+
+	fmt.Printf("loaded account:\n  %s\n", loadedAggregate.Entity())
+
+	//
+	// the below demonstrates some lower-level event store operations
+	//
+
+	// create an iterator to read events from a specific stream
+	iter, err := eventStore.ReadStream(ctx, aggregate.ID(), eventstore.ReadStreamOptions{})
+	check(err)
+
+	// create a projection using the event iterator
+	proj, err := projection.New(iter)
+	check(err)
+
+	// run the projection, simply printing a line for each event
+	fmt.Println()
+	fmt.Printf("events in stream %s:\n", aggregate.ID())
+	_, err = proj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
+		fmt.Printf("  %s @%d %s %s\n", evt.StreamID.ShortString(), evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.Type)
+		return nil
+	}))
+	check(err)
+}
+
+func check(err error) {
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Println("loaded account:", loadedAggregate.Entity())
 }
