@@ -1,6 +1,6 @@
 module github.com/go-estoria/estoria-examples/current
 
-go 1.25.0
+go 1.25.1
 
 replace github.com/go-estoria/estoria => ../../estoria
 
