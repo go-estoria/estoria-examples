@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-estoria/estoria"
 	pgeventstore "github.com/go-estoria/estoria-contrib/postgres/eventstore"
 	pgstrategy "github.com/go-estoria/estoria-contrib/postgres/eventstore/strategy"
+	pgoutbox "github.com/go-estoria/estoria-contrib/postgres/outbox"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
 	"github.com/go-estoria/estoria/eventstore/projection"
@@ -58,7 +60,22 @@ func main() {
 		panic(err)
 	}
 
-	eventStore, err := pgeventstore.New(db, pgeventstore.WithStrategy(strategy))
+	// create an outbox to reliably deliver events to external consumers;
+	// the handler is called for each event as it is processed from the outbox
+	outbox, err := pgoutbox.New(db, func(_ context.Context, item *pgoutbox.Item) error {
+		fmt.Printf("  outbox: processed %s @%d from stream %s\n", item.EventID.Type, item.StreamVersion, item.StreamID.ShortString())
+		return nil
+	})
+	check(err)
+
+	if _, err := db.ExecContext(ctx, outbox.Schema()); err != nil {
+		panic(err)
+	}
+
+	eventStore, err := pgeventstore.New(db,
+		pgeventstore.WithStrategy(strategy),
+		pgeventstore.WithAppendTransactionHooks(outbox),
+	)
 	check(err)
 
 	var aggregateStore aggregatestore.Store[Account]
@@ -99,6 +116,19 @@ func main() {
 	}
 
 	fmt.Printf("saved account:\n  %s\n", aggregate.Entity())
+
+	// process all outbox items; in a real application this would typically
+	// run continuously via outbox.Run(ctx) in a separate goroutine
+	fmt.Println()
+	fmt.Println("processing outbox items:")
+	for {
+		if err := outbox.ProcessNext(ctx); err != nil {
+			if errors.Is(err, pgoutbox.ErrNoItems) {
+				break
+			}
+			panic(err)
+		}
+	}
 
 	// load the aggregate
 	loadedAggregate, err := aggregateStore.Load(ctx, accountID, nil)
