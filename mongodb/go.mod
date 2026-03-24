@@ -3,12 +3,11 @@ module github.com/go-estoria/estoria-examples/mongodb
 go 1.26.1
 
 require (
-	github.com/go-estoria/estoria v0.1.6
-	github.com/go-estoria/estoria-contrib v0.0.0-20250128045749-70977af74f46
+	github.com/go-estoria/estoria v0.3.0
+	github.com/go-estoria/estoria-contrib v0.1.0
 	github.com/gofrs/uuid/v5 v5.3.2
 	go.mongodb.org/mongo-driver/v2 v2.0.0
 )
-
 
 require (
 	github.com/golang/snappy v0.0.4 // indirect
