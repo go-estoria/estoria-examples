@@ -158,7 +158,7 @@ func main() {
 	check(err)
 
 	// some event stores, such as this one, support listing streams
-	streams, err := eventStore.ListStreams()
+	streams, err := eventStore.ListStreams(ctx)
 	check(err)
 	fmt.Println()
 	fmt.Println("all streams in event store:")
