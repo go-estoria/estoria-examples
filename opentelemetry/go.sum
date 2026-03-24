@@ -2,6 +2,10 @@ github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK3
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/go-estoria/estoria v0.3.0 h1:V0oCtu42lUrxie8Cc6As0Kk4MmJcg5XUn9xU+mT8yfM=
+github.com/go-estoria/estoria v0.3.0/go.mod h1:w/1pwY/YU9M4WV+HdL2vpYVAhVINFwaVf1nSPnebNJQ=
+github.com/go-estoria/estoria-contrib v0.1.0 h1:N1ZFiQHGHyHUzLWnHOX5bXDuMN5sw2dJg2nnCa/o/SM=
+github.com/go-estoria/estoria-contrib v0.1.0/go.mod h1:Cv6AToS7fJyQHkj7eONL7xXp0pDoNYeKX/BiFtVBtFA=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=

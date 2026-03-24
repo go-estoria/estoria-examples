@@ -1,18 +1,11 @@
 module github.com/go-estoria/estoria-examples/current
 
-go 1.25.0
-
-replace github.com/go-estoria/estoria => ../../estoria
-
-replace github.com/go-estoria/estoria-contrib => ../../estoria-contrib
+go 1.26.1
 
 require (
-	github.com/go-estoria/estoria v0.1.6
-	github.com/go-estoria/estoria-contrib v0.0.0-20250128045749-70977af74f46
+	github.com/go-estoria/estoria v0.3.0
+	github.com/go-estoria/estoria-contrib v0.1.0
 	github.com/gofrs/uuid/v5 v5.3.2
-)
-
-require (
 	github.com/kurrent-io/KurrentDB-Client-Go v1.0.1
 	github.com/lib/pq v1.10.9
 )
