@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estoria Fleet</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📡</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="dish">📡</span><strong>estoria</strong>&nbsp;fleet</div>
+  <h1>Sensor Fleet</h1>
+  <div class="spacer"></div>
+  <span id="stat-devices" class="pill">&hellip;</span>
+  <span id="stat-events" class="pill">&hellip;</span>
+  <span id="stat-rate" class="pill">&hellip;</span>
+  <span id="conn-pill" class="pill">connecting&hellip;</span>
+  <button id="sim-btn" class="btn ghost">&hellip;</button>
+  <button id="panel-toggle" class="btn ghost">Under the Hood</button>
+</header>
+
+<main id="layout">
+  <section id="grid" class="grid" aria-label="device fleet"></section>
+
+  <aside id="panel" class="panel hidden">
+    <section class="panel-section">
+      <h2>Aggregate store stack</h2>
+      <p class="hint">Each layer implements the same four-method <code>Store[Device]</code> interface and wraps the one below it. Every simulator tick loads, appends, and saves through the whole stack.</p>
+      <ol id="stack" class="stack"></ol>
+    </section>
+
+    <section class="panel-section">
+      <h2>Fleet totals</h2>
+      <div id="totals" class="totals"></div>
+      <p class="hint">Device streams grow forever — a reading every few seconds, per device. Snapshots are just events in each device's parallel <code>devicesnapshot</code> stream, in the same SQLite file.</p>
+    </section>
+
+    <section class="panel-section grow">
+      <h2>Event streams</h2>
+      <dl id="streams" class="streams"></dl>
+    </section>
+  </aside>
+</main>
+
+<aside id="drawer" class="drawer hidden">
+  <header class="drawer-header">
+    <span id="drawer-dot" class="status-dot"></span>
+    <h2 id="drawer-name">&hellip;</h2>
+    <span id="drawer-alert" class="alert-badge hidden">🔥 overheat</span>
+    <div class="spacer"></div>
+    <button id="drawer-close" class="btn ghost" aria-label="Close">✕</button>
+  </header>
+
+  <div class="drawer-body">
+    <div id="alert-banner" class="alert-banner hidden"></div>
+
+    <div id="drawer-meta" class="meta-grid"></div>
+
+    <section class="chart-block">
+      <h3>Temperature °C</h3>
+      <div id="chart-temp" class="chart"></div>
+    </section>
+
+    <section class="chart-block">
+      <h3>Humidity %</h3>
+      <div id="chart-hum" class="chart"></div>
+    </section>
+
+    <section class="chart-block">
+      <h3>Hydration benchmark</h3>
+      <p class="hint">Loads this device three ways, timed: a cold replay of the entire stream through the plain
+        <code>EventSourcedStore</code>, a snapshot-assisted load through the <code>SnapshottingStore</code>,
+        and a cache hit through the full stack. The longer the stream, the wider the gap.</p>
+      <div class="bench-actions">
+        <button id="bench-btn" class="btn primary">Run hydration benchmark</button>
+        <button id="evict-btn" class="btn ghost" title="Delete this device's entry from bigcache so the next load falls through to the snapshotting store">Evict from cache</button>
+      </div>
+      <div id="bench" class="bench"></div>
+    </section>
+  </div>
+</aside>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
