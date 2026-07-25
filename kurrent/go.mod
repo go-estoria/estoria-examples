@@ -1,4 +1,4 @@
-module github.com/go-estoria/estoria-examples/current
+module github.com/go-estoria/estoria-examples/kurrent
 
 go 1.26.1
 
@@ -7,7 +7,6 @@ require (
 	github.com/go-estoria/estoria-contrib v0.1.0
 	github.com/gofrs/uuid/v5 v5.3.2
 	github.com/kurrent-io/KurrentDB-Client-Go v1.0.1
-	github.com/lib/pq v1.10.9
 )
 
 require (
