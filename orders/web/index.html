@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estoria Orders</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="box">📦</span><strong>estoria</strong>&nbsp;orders</div>
+  <div id="badges" class="badges" title="Order counts, served from the order_summaries read model"></div>
+  <div class="spacer"></div>
+  <span id="conn-pill" class="pill">connecting&hellip;</span>
+  <button id="new-order" class="btn primary">+ New order</button>
+</header>
+
+<main id="layout">
+  <section class="orders-wrap" aria-label="orders">
+    <div class="table-scroll">
+      <table class="orders">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Customer</th>
+            <th class="num">Items</th>
+            <th class="num">Total</th>
+            <th>Status</th>
+            <th>Age</th>
+          </tr>
+        </thead>
+        <tbody id="orders-body"></tbody>
+      </table>
+      <div id="orders-empty" class="empty hidden">
+        No orders yet — click <strong>+ New order</strong> to place one.
+      </div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <section class="panel-section">
+      <h2>Outbox monitor</h2>
+      <p class="hint">Each command commits its events <em>and</em> matching outbox rows in one
+        Postgres transaction. A background processor delivers them in per&#8209;stream FIFO order —
+        here, by updating the <code>order_summaries</code> read model that powers the list on the left.</p>
+      <div class="pending-row">
+        <span class="pending-label">pending deliveries</span>
+        <span id="pending-count" class="pending-count">0</span>
+      </div>
+    </section>
+
+    <section class="panel-section grow">
+      <h2>Webhook deliveries <span class="hint-inline">(newest first)</span></h2>
+      <ul id="deliveries" class="deliveries"></ul>
+    </section>
+  </aside>
+</main>
+
+<div id="drawer-scrim" class="drawer-scrim hidden"></div>
+
+<aside id="drawer" class="drawer hidden" aria-label="order detail">
+  <header class="drawer-header">
+    <div>
+      <div id="drawer-title" class="drawer-title">Order</div>
+      <div id="drawer-sub" class="drawer-sub"></div>
+    </div>
+    <button id="drawer-close" class="btn ghost" aria-label="Close">✕</button>
+  </header>
+
+  <div id="stepper" class="stepper"></div>
+
+  <section class="drawer-section">
+    <h2>Items</h2>
+    <ul id="drawer-items" class="items"></ul>
+    <div class="total-row">
+      <span>Total</span>
+      <span id="drawer-total" class="total"></span>
+    </div>
+  </section>
+
+  <div id="drawer-actions" class="drawer-actions"></div>
+
+  <section class="drawer-section grow">
+    <h2>Event timeline</h2>
+    <p class="hint">A raw read of this order's event stream — the aggregate's full history,
+      not a log kept on the side.</p>
+    <ul id="timeline" class="timeline"></ul>
+  </section>
+</aside>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
