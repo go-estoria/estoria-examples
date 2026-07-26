@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -333,5 +334,42 @@ func TestHubCapacity(t *testing.T) {
 	h.unsubscribe(first)
 	if _, ok := h.subscribe(); !ok {
 		t.Error("a slot was not freed when a client disconnected")
+	}
+}
+
+// TestPathOrderID covers the {id} segment without needing a database: every
+// case is rejected before the handler touches a store, which is the point —
+// the nil UUID used to reach estoria and come back as a 500.
+func TestPathOrderID(t *testing.T) {
+	t.Parallel()
+
+	handler := (&server{}).routes()
+
+	for _, tc := range []struct {
+		name string
+		id   string
+		want int
+	}{
+		{"malformed", "not-a-uuid", http.StatusBadRequest},
+		{"nil UUID", "00000000-0000-0000-0000-000000000000", http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, target := range []string{
+				"GET /api/orders/" + tc.id,
+				"POST /api/orders/" + tc.id + "/pay",
+			} {
+				method, path, _ := strings.Cut(target, " ")
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest(method, path, strings.NewReader(`{"baseVersion":1}`))
+				req.Header.Set("Content-Type", "application/json")
+				handler.ServeHTTP(rec, req)
+
+				if rec.Code != tc.want {
+					t.Errorf("%s = %d, want %d (body: %s)", target, rec.Code, tc.want, rec.Body.String())
+				}
+			}
+		})
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -290,5 +291,44 @@ func TestRunResets(t *testing.T) {
 	case <-watcher:
 		t.Error("the scheduler kept resetting after its context was cancelled")
 	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// TestPathGameID covers the three shapes a client can put in the {id} segment.
+// The nil UUID is the interesting one: it parses, so it reaches estoria, which
+// rejects it — and that surfaced as a 500 for what is plainly bad input.
+func TestPathGameID(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t)
+	handler := srv.routes()
+
+	for _, tc := range []struct {
+		name string
+		id   string
+		want int
+	}{
+		{"malformed", "not-a-uuid", http.StatusBadRequest},
+		{"nil UUID", "00000000-0000-0000-0000-000000000000", http.StatusBadRequest},
+		{"well-formed but unknown", "83f07308-a33c-41ec-85f5-72d7afd3d73b", http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, target := range []string{
+				"GET /api/games/" + tc.id,
+				"POST /api/games/" + tc.id + "/move",
+			} {
+				method, path, _ := strings.Cut(target, " ")
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest(method, path, strings.NewReader(`{"baseVersion":1,"uci":"e2e4"}`))
+				req.Header.Set("Content-Type", "application/json")
+				handler.ServeHTTP(rec, req)
+
+				if rec.Code != tc.want {
+					t.Errorf("%s = %d, want %d (body: %s)", target, rec.Code, tc.want, rec.Body.String())
+				}
+			}
+		})
 	}
 }
