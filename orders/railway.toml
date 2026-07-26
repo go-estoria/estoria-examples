@@ -13,6 +13,11 @@
 [build]
 builder = "DOCKERFILE"
 
+# Gitignore-style, relative to the repository root: only changes under this
+# example redeploy this service. Without it, every merge to main redeploys
+# every service in the project, since they all watch the same repo.
+watchPatterns = ["/orders/**"]
+
 [deploy]
 healthcheckPath = "/"
 restartPolicyType = "ON_FAILURE"
