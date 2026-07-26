@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege: CI only needs to read the repo.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref (e.g. rapid pushes to a PR).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Every example is its own Go module with its own pinned estoria/contrib
+  # versions — that isolation is the point, so each one is checked separately.
+  # Adding an example means adding it to both matrices below.
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          # gofmt is module-independent; any module's toolchain will do.
+          go-version-file: kanban/go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+  lint:
+    name: Lint (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - chess
+          - fleet
+          - inspector
+          - kanban
+          - kurrent
+          - mongodb
+          - opentelemetry
+          - orders
+          - postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          # Pinned to the v2 line so a future golangci-lint v3 can't reject the
+          # `version: "2"` config and turn the job red for unrelated reasons.
+          version: v2.12
+          working-directory: ${{ matrix.module }}
+
+  test:
+    name: Test (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - chess
+          - fleet
+          - inspector
+          - kanban
+          - kurrent
+          - mongodb
+          - opentelemetry
+          - orders
+          - postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+      - name: Build
+        run: go build ./...
+        working-directory: ${{ matrix.module }}
+      - name: Vet
+        run: go vet ./...
+        working-directory: ${{ matrix.module }}
+      # No services here on purpose: every test in this repo runs against an
+      # in-memory or temp-file store. The examples that need Postgres, MongoDB,
+      # or KurrentDB only need them at `go run` time, not under test.
+      - name: Test
+        run: go test -race -cover ./...
+        working-directory: ${{ matrix.module }}

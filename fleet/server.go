@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 	"sort"
@@ -380,12 +379,6 @@ func (s *server) writeLoadError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeError(w, http.StatusInternalServerError, err.Error())
-}
-
-func readJSON[T any](r *http.Request) (T, error) {
-	var v T
-	err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&v)
-	return v, err
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

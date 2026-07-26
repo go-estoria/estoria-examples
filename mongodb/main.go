@@ -50,7 +50,7 @@ func main() {
 		SetReplicaSet("rs0").
 		SetDirect(true))
 	check(err)
-	defer client.Disconnect(ctx)
+	defer func() { _ = client.Disconnect(ctx) }()
 
 	// verify connection
 	check(client.Ping(ctx, nil))

@@ -1,0 +1,49 @@
+version: 2
+updates:
+  # Go module dependencies. Every example is its own module, so each directory
+  # is listed explicitly; adding an example means adding it here.
+  #
+  # These examples pin released estoria/estoria-contrib tags on purpose, so
+  # these PRs are the signal that an example has drifted behind the libraries.
+  # Verify one by running the example, not just by watching CI go green — a
+  # bump can compile cleanly and still be semantically stale.
+  - package-ecosystem: gomod
+    directories:
+      - /chess
+      - /fleet
+      - /inspector
+      - /kanban
+      - /kurrent
+      - /mongodb
+      - /opentelemetry
+      - /orders
+      - /postgres
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    # release-info.yml requires a release label on every PR; without this,
+    # each dependabot PR would sit blocked waiting to be labeled by hand.
+    labels:
+      - dependencies
+      - no release
+    groups:
+      # Batch minor/patch bumps into a single PR to cut noise.
+      # Major bumps still arrive as individual PRs.
+      go-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions used by the workflows in this repo.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - github_actions
+      - no release
+    groups:
+      github-actions:
+        update-types:
+          - minor
+          - patch
