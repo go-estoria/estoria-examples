@@ -4,11 +4,11 @@
 
 Example applications demonstrating the features of Estoria, an event sourcing toolkit for Go.
 
-Each example is a self-contained Go module that pins released versions of
+Each example is a self-contained Go module pinning released versions of
 [estoria](https://github.com/go-estoria/estoria) and
-[estoria-contrib](https://github.com/go-estoria/estoria-contrib) — no `replace`
-directives — so any one of them can be copied out of this repo and run on its own.
-CI builds, vets, tests, and lints every module independently.
+[estoria-contrib](https://github.com/go-estoria/estoria-contrib), so any one of
+them can be copied out of this repo and run on its own. CI builds, vets, tests,
+and lints every module independently.
 
 ## Applications
 
