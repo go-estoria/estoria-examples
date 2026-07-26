@@ -16,7 +16,7 @@ import (
 // something a visitor can predict, unlike an interval counted from boot.
 func (s *server) runHourlyReset(ctx context.Context) {
 	for {
-		timer := time.NewTimer(time.Until(time.Now().Truncate(time.Hour).Add(time.Hour)))
+		timer := time.NewTimer(time.Until(nextHour(time.Now())))
 
 		select {
 		case <-ctx.Done():
@@ -32,6 +32,14 @@ func (s *server) runHourlyReset(ctx context.Context) {
 
 		estoria.GetLogger().Info("reset demo board")
 	}
+}
+
+// nextHour returns the next hour boundary after t. Truncate works on absolute
+// time, so the boundary is a UTC one — identical to the local top of the hour
+// wherever the offset is a whole number of hours, which includes the UTC
+// containers this runs in.
+func nextHour(t time.Time) time.Time {
+	return t.Truncate(time.Hour).Add(time.Hour)
 }
 
 // resetDemo clears the event store and reseeds the starting board.
@@ -58,6 +66,9 @@ func (s *server) resetDemo(ctx context.Context) error {
 		}
 	}
 
+	// This save fires the AfterSave hook, which broadcasts while resetMu is
+	// held for writing. That is safe because the hub takes only its own lock
+	// and no handler broadcasts while holding resetMu — keep it that way.
 	if err := seedBoard(ctx, s.live, s.boardID); err != nil {
 		return fmt.Errorf("reseeding board: %w", err)
 	}

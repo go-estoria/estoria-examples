@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	sqlstore "github.com/go-estoria/estoria-contrib/sqlite/eventstore"
 	sqlstrategy "github.com/go-estoria/estoria-contrib/sqlite/eventstore/strategy"
@@ -153,6 +154,30 @@ func TestResetDemo(t *testing.T) {
 	}
 	if got := srv.rowCount(t, streamsTable); got != seededStreams {
 		t.Errorf("stream rows after reset = %d, want %d (a freshly seeded store)", got, seededStreams)
+	}
+}
+
+func TestNextHour(t *testing.T) {
+	t.Parallel()
+
+	for _, at := range []string{
+		"2026-07-26T04:00:00Z",
+		"2026-07-26T04:00:01Z",
+		"2026-07-26T04:37:12Z",
+		"2026-07-26T23:59:59Z",
+	} {
+		now, err := time.Parse(time.RFC3339, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		next := nextHour(now)
+		if next.Minute() != 0 || next.Second() != 0 || next.Nanosecond() != 0 {
+			t.Errorf("nextHour(%s) = %s, want an exact hour boundary", at, next)
+		}
+		if d := next.Sub(now); d <= 0 || d > time.Hour {
+			t.Errorf("nextHour(%s) is %s away, want within (0, 1h]", at, d)
+		}
 	}
 }
 
