@@ -507,10 +507,14 @@ func (s *server) handleWatch(w http.ResponseWriter, r *http.Request) {
 }
 
 // pathGameID parses the {id} path segment as a game UUID, writing a 400 when
-// it is malformed.
+// it is malformed or nil.
+//
+// The nil UUID parses fine but is not a usable aggregate ID — estoria rejects
+// it downstream with "aggregate ID is nil", which would surface to the caller
+// as a 500 for what is plainly bad input.
 func pathGameID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	id, err := uuid.FromString(r.PathValue("id"))
-	if err != nil {
+	if err != nil || id.IsNil() {
 		writeError(w, http.StatusBadRequest, "invalid game ID")
 		return uuid.Nil, false
 	}

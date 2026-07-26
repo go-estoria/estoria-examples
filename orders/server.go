@@ -136,9 +136,8 @@ func (s *server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleGetOrder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	id, err := uuid.FromString(r.PathValue("id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid order ID")
+	id, ok := pathOrderID(w, r)
+	if !ok {
 		return
 	}
 
@@ -182,9 +181,8 @@ func (s *server) runCommand(w http.ResponseWriter, r *http.Request, baseVersion 
 
 	ctx := r.Context()
 
-	id, err := uuid.FromString(r.PathValue("id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid order ID")
+	id, ok := pathOrderID(w, r)
+	if !ok {
 		return
 	}
 
@@ -462,6 +460,21 @@ func (s *server) handleWatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// pathOrderID parses the {id} path segment as an order UUID, writing a 400
+// when it is malformed or nil.
+//
+// The nil UUID parses fine but is not a usable aggregate ID — estoria rejects
+// it downstream with "aggregate ID is nil", which would surface to the caller
+// as a 500 for what is plainly bad input.
+func pathOrderID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	id, err := uuid.FromString(r.PathValue("id"))
+	if err != nil || id.IsNil() {
+		writeError(w, http.StatusBadRequest, "invalid order ID")
+		return uuid.Nil, false
+	}
+	return id, true
 }
 
 func (s *server) writeLoadError(w http.ResponseWriter, err error) {
