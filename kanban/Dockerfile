@@ -35,4 +35,9 @@ EXPOSE 8080
 # container starts from a freshly seeded board every time.
 VOLUME ["/data"]
 
-ENTRYPOINT ["/usr/local/bin/kanban", "-db", "/data/kanban.db"]
+# The default command is the hosted-demo configuration: the board resets on the
+# hour, writes are rate limited per client IP, and live connections are capped.
+# Override by passing your own arguments to `docker run`. None of this is on
+# when the example is run directly with `go run .`.
+ENTRYPOINT ["/usr/local/bin/kanban"]
+CMD ["-db", "/data/kanban.db", "-hourly-reset", "-trust-proxy", "-writes-per-minute", "60", "-max-clients", "200"]
