@@ -131,8 +131,9 @@ which has no module and no Dockerfile. `railway.toml` in this folder covers
 the rest (builder, health check, restart policy).
 
 It listens on `$PORT` when the platform sets one, so it drops straight onto
-Railway, Fly, or Cloud Run. The database lives at `/data` — mount a volume there
-to keep games across deploys, or don't, and every deploy starts fresh.
+Railway, Fly, or Cloud Run. The database lives at `/data`; mount something there
+(`docker run -v`, or a Railway Volume) to keep games across deploys, or don't,
+and every deploy starts fresh.
 
 Four flags exist only for public hosting, and are off unless passed:
 
