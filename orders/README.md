@@ -148,6 +148,11 @@ docker build -t estoria-orders .
 docker run -p 8082:8082 -e DATABASE_URL=postgres://... estoria-orders
 ```
 
+On Railway, add a service pointed at this repository and set its **Root
+Directory** to `/orders` — without it the build runs from the repository root,
+which has no module and no Dockerfile. `railway.toml` in this folder covers
+the rest (builder, health check, restart policy).
+
 It listens on `$PORT` and reads its DSN from `$DATABASE_URL` when they are set,
 so it drops straight onto Railway, Fly, or Cloud Run alongside a managed
 Postgres.

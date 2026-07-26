@@ -117,6 +117,11 @@ docker build -t estoria-kanban .
 docker run -p 8080:8080 estoria-kanban
 ```
 
+On Railway, add a service pointed at this repository and set its **Root
+Directory** to `/kanban` — without it the build runs from the repository root,
+which has no module and no Dockerfile. `railway.toml` in this folder covers
+the rest (builder, health check, restart policy).
+
 It listens on `$PORT` when the platform sets one, so it drops straight onto
 Railway, Fly, or Cloud Run. The database lives at `/data` — mount a volume there
 to keep the board across deploys, or don't, and every deploy starts fresh.
