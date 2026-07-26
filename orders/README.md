@@ -136,6 +136,34 @@ DEBUG=1 go run .      # verbose estoria logging (watch appends and outbox polls)
 go run . -h           # flags: -addr, -dsn
 ```
 
+## Deploying it
+
+The example ships a Dockerfile: a two-stage build ending in distroless static
+(about 20 MB, no shell, runs as nonroot). pgx is pure Go, so `CGO_ENABLED=0` is
+all it takes, and the container keeps nothing on local disk — its state is the
+database.
+
+```sh
+docker build -t estoria-orders .
+docker run -p 8082:8082 -e DATABASE_URL=postgres://... estoria-orders
+```
+
+It listens on `$PORT` and reads its DSN from `$DATABASE_URL` when they are set,
+so it drops straight onto Railway, Fly, or Cloud Run alongside a managed
+Postgres.
+
+Four flags exist only for public hosting, and are off unless passed:
+
+| Flag | Effect |
+| --- | --- |
+| `-hourly-reset` | truncates the streams, the outbox, and the read model at the top of every hour |
+| `-writes-per-minute N` | per-IP token bucket on state-changing requests; reads are never limited |
+| `-trust-proxy` | take the client IP from `X-Forwarded-For` (only behind a proxy that overwrites it) |
+| `-max-clients N` | cap concurrent SSE connections |
+
+The image's default command turns all four on. Running the example locally with
+`go run .` turns none of them on.
+
 ## Things to try
 
 - Open the app in two tabs and race them: pay the same order from both. One tab

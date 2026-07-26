@@ -12,9 +12,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// outboxTable is the outbox's default table name; the pending-count query in
-// pendingOutbox reads it directly for the monitor panel.
-const outboxTable = "outbox"
+// The tables this file owns or reads directly: outboxTable is the outbox's
+// default table name, which the pending-count query in pendingOutbox reads for
+// the monitor panel, and readModelTable is the read model created in schema().
+// The demo reset truncates both (see demo.go).
+const (
+	outboxTable    = "outbox"
+	readModelTable = "order_summaries"
+)
 
 // An orderSummary is one row of the order_summaries read model: the handful
 // of denormalized fields the order list needs, kept current by the outbox
@@ -208,6 +213,17 @@ func (l *deliveryLog) add(d delivery) {
 	if l.next == 0 {
 		l.full = true
 	}
+}
+
+// reset empties the log. Used only by the hosted demo's hourly reset, which
+// deletes the orders those deliveries refer to (see demo.go).
+func (l *deliveryLog) reset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	clear(l.entries)
+	l.next = 0
+	l.full = false
 }
 
 // recent returns the logged deliveries, newest first.

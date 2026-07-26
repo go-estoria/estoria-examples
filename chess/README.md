@@ -114,6 +114,33 @@ DEBUG=1 go run .      # verbose estoria logging (watch every hydration)
 go run . -h           # flags: -addr, -db
 ```
 
+## Deploying it
+
+The example ships a Dockerfile: a two-stage build ending in distroless static
+(about 20 MB, no shell, runs as nonroot). The SQLite driver is pure Go, so
+`CGO_ENABLED=0` is all it takes.
+
+```sh
+docker build -t estoria-chess .
+docker run -p 8084:8084 estoria-chess
+```
+
+It listens on `$PORT` when the platform sets one, so it drops straight onto
+Railway, Fly, or Cloud Run. The database lives at `/data` — mount a volume there
+to keep games across deploys, or don't, and every deploy starts fresh.
+
+Four flags exist only for public hosting, and are off unless passed:
+
+| Flag | Effect |
+| --- | --- |
+| `-hourly-reset` | deletes every game at the top of every hour |
+| `-writes-per-minute N` | per-IP token bucket on state-changing requests; reads are never limited |
+| `-trust-proxy` | take the client IP from `X-Forwarded-For` (only behind a proxy that overwrites it) |
+| `-max-clients N` | cap concurrent SSE connections |
+
+The image's default command turns all four on. Running the example locally with
+`go run .` turns none of them on.
+
 ## Things to try
 
 - Open a game in two tabs and play both sides. Then try to move for the same

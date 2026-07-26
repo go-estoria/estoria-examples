@@ -41,10 +41,47 @@ import (
 // A fixed board ID so the same board is loaded across restarts.
 var boardUUID = uuid.Must(uuid.FromString("e5701a1a-b0a2-4d00-8000-000000000001"))
 
+// The storage strategy's table names. They match its defaults, but are named
+// here because the demo reset deletes from them directly (see demo.go), and
+// that coupling should be visible rather than implied.
+const (
+	eventsTable  = "event"
+	streamsTable = "stream"
+)
+
+// demoConfig holds the settings that only matter when this example is hosted
+// publicly. Every one of them is inert by default: run the example locally and
+// it behaves exactly as it did before any of this existed.
+type demoConfig struct {
+	// hourlyReset clears and reseeds the board at the top of every hour.
+	hourlyReset bool
+
+	// writesPerMinute caps state-changing requests per client IP (0 disables).
+	writesPerMinute int
+
+	// trustProxy reads the client IP from X-Forwarded-For. Only safe behind a
+	// proxy that overwrites that header.
+	trustProxy bool
+
+	// maxClients caps concurrent SSE connections (0 disables).
+	maxClients int
+}
+
 func main() {
-	addr := flag.String("addr", ":8080", "HTTP listen address")
+	addr := flag.String("addr", defaultAddr(":8080"), "HTTP listen address")
 	dbPath := flag.String("db", "kanban.db", "path to the SQLite database file")
 	snapshotEvery := flag.Int64("snapshot-every", 10, "take an aggregate snapshot every N events")
+
+	var demo demoConfig
+	flag.BoolVar(&demo.hourlyReset, "hourly-reset", false,
+		"clear and reseed the board at the top of every hour (for public demos)")
+	flag.IntVar(&demo.writesPerMinute, "writes-per-minute", 0,
+		"per-IP limit on state-changing requests (0 disables)")
+	flag.BoolVar(&demo.trustProxy, "trust-proxy", false,
+		"read the client IP from X-Forwarded-For (only behind a trusted proxy)")
+	flag.IntVar(&demo.maxClients, "max-clients", 0,
+		"maximum concurrent live (SSE) connections (0 disables)")
+
 	flag.Parse()
 
 	if os.Getenv("DEBUG") != "" {
@@ -58,13 +95,23 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, *addr, *dbPath, *snapshotEvery); err != nil {
+	if err := run(ctx, *addr, *dbPath, *snapshotEvery, demo); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, addr, dbPath string, snapshotEvery int64) error {
+// defaultAddr honors the PORT environment variable, which is how container
+// platforms (Railway, Fly, Cloud Run, ...) tell a process where to listen.
+// An explicit -addr still wins, since flag parsing overrides this default.
+func defaultAddr(fallback string) string {
+	if port := os.Getenv("PORT"); port != "" {
+		return ":" + port
+	}
+	return fallback
+}
+
+func run(ctx context.Context, addr, dbPath string, snapshotEvery int64, demo demoConfig) error {
 	// SQLite via a pure-Go driver: persistent, transactional, and no server
 	// to run. WAL mode lets reads proceed while a write is in flight.
 	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", dbPath)
@@ -79,7 +126,10 @@ func run(ctx context.Context, addr, dbPath string, snapshotEvery int64) error {
 	}
 
 	// the default strategy stores all streams in a single table
-	strat, err := sqlstrategy.NewDefaultStrategy()
+	strat, err := sqlstrategy.NewDefaultStrategy(
+		sqlstrategy.WithEventsTableName(eventsTable),
+		sqlstrategy.WithStreamsTableName(streamsTable),
+	)
 	if err != nil {
 		return fmt.Errorf("creating strategy: %w", err)
 	}
@@ -123,7 +173,7 @@ func run(ctx context.Context, addr, dbPath string, snapshotEvery int64) error {
 		return fmt.Errorf("creating hookable store: %w", err)
 	}
 
-	broadcasts := newHub()
+	broadcasts := newHub(demo.maxClients)
 	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Board]) error {
 		broadcasts.broadcast(boardMessage{Version: agg.Version(), Live: true, Board: agg.Entity()})
 		return nil
@@ -144,11 +194,23 @@ func run(ctx context.Context, addr, dbPath string, snapshotEvery int64) error {
 		live:          hookable,
 		history:       eventSourced,
 		events:        eventStore,
+		db:            db,
 		hub:           broadcasts,
 		snapshotEvery: snapshotEvery,
 	}
 
-	httpServer := &http.Server{Addr: addr, Handler: srv.routes()}
+	// Hosted-demo behavior, all off by default (see demoConfig).
+	handler := srv.routes()
+	if demo.writesPerMinute > 0 {
+		limiter := newRateLimiter(demo.writesPerMinute, demo.trustProxy)
+		go limiter.runSweeper(ctx)
+		handler = limiter.middleware(handler)
+	}
+	if demo.hourlyReset {
+		go srv.runHourlyReset(ctx)
+	}
+
+	httpServer := &http.Server{Addr: addr, Handler: handler}
 
 	go func() {
 		<-ctx.Done()

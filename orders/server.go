@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-estoria/estoria"
@@ -19,6 +20,7 @@ import (
 	"github.com/go-estoria/estoria/eventstore/projection"
 	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:embed all:web
@@ -36,6 +38,15 @@ type server struct {
 	// readModel serves all list-shaped queries. It is populated exclusively
 	// by the outbox processor — the HTTP layer never writes to it.
 	readModel *readModel
+
+	// pool is the underlying connection pool, used only by the demo reset
+	// (see demo.go) to clear storage directly.
+	pool *pgxpool.Pool
+
+	// resetMu is held for writing while the demo reset clears the database,
+	// and for reading while a command runs. It is uncontended in normal
+	// operation: without -hourly-reset nothing ever takes the write side.
+	resetMu sync.RWMutex
 
 	hub *hub
 	log *deliveryLog
@@ -97,6 +108,9 @@ func (s *server) handleListOrders(w http.ResponseWriter, r *http.Request) {
 // handleCreateOrder places a demo order: a random customer buying random
 // catalog items. One OrderPlaced event starts a brand-new stream.
 func (s *server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	agg := s.orders.New(typeid.NewV7("order").UUID)
 
 	if err := agg.Append(randomOrder()); err != nil {
@@ -161,6 +175,11 @@ type commandFunc func(order Order) (estoria.EntityEvent[Order], error)
 //     row in one transaction. On a version conflict, respond 409 so the
 //     client can refresh and retry.
 func (s *server) runCommand(w http.ResponseWriter, r *http.Request, baseVersion int64, cmd commandFunc) {
+	// Held for the whole load-validate-save cycle so a demo reset can't clear
+	// the stream out from under it. Uncontended unless -hourly-reset is on.
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	ctx := r.Context()
 
 	id, err := uuid.FromString(r.PathValue("id"))
@@ -413,7 +432,11 @@ func (s *server) handleWatch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	rc := http.NewResponseController(w)
 
-	ch := s.hub.subscribe()
+	ch, ok := s.hub.subscribe()
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "too many live connections right now — try again shortly")
+		return
+	}
 	defer s.hub.unsubscribe(ch)
 
 	// an initial comment forces headers out so the client sees the stream

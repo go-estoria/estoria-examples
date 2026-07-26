@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-estoria/estoria"
@@ -35,6 +37,15 @@ type server struct {
 
 	// events is the raw event store, used to list game streams for the lobby.
 	events *sqlstore.EventStore
+
+	// db is the underlying database handle, used only by the demo reset
+	// (see demo.go) to clear storage directly.
+	db *sql.DB
+
+	// resetMu is held for writing while the demo reset clears the event store,
+	// and for reading while a command runs. It is uncontended in normal
+	// operation: without -hourly-reset nothing ever takes the write side.
+	resetMu sync.RWMutex
 
 	hub *hub
 }
@@ -110,6 +121,9 @@ type gameSummary struct {
 func (s *server) handleListGames(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	streams, err := s.events.ListStreams(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -150,6 +164,9 @@ func (s *server) handleListGames(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	req, err := readJSON[struct {
 		White string `json:"white"`
 		Black string `json:"black"`
@@ -305,6 +322,11 @@ type commandFunc func(game Game) (estoria.EntityEvent[Game], error)
 func (s *server) runCommand(w http.ResponseWriter, r *http.Request, gameID uuid.UUID, baseVersion int64, cmd commandFunc) {
 	ctx := r.Context()
 
+	// Held for the whole load-validate-save cycle so a demo reset can't clear
+	// the stream out from under it. Uncontended unless -hourly-reset is on.
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	var agg *aggregatestore.Aggregate[Game]
 	var err error
 	if baseVersion > 0 {
@@ -448,12 +470,16 @@ func (s *server) handlePGN(w http.ResponseWriter, r *http.Request) {
 // Every message carries a gameId; the game view filters for its own game and
 // the lobby uses every message to keep its list fresh.
 func (s *server) handleWatch(w http.ResponseWriter, r *http.Request) {
+	ch, ok := s.hub.subscribe()
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "too many live connections right now — try again shortly")
+		return
+	}
+	defer s.hub.unsubscribe(ch)
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	rc := http.NewResponseController(w)
-
-	ch := s.hub.subscribe()
-	defer s.hub.unsubscribe(ch)
 
 	// an initial comment confirms the connection so clients can flip their
 	// status pill immediately

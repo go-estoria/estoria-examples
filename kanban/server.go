@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-estoria/estoria"
@@ -41,6 +43,15 @@ type server struct {
 	// events is the raw event store, used for stream-level reads (activity
 	// feed, stats) that don't need an aggregate.
 	events *sqlstore.EventStore
+
+	// db is the underlying database handle, used only by the demo reset
+	// (see demo.go) to clear storage directly.
+	db *sql.DB
+
+	// resetMu is held for writing while the demo reset clears and reseeds the
+	// event store, and for reading while a command runs. It is uncontended in
+	// normal operation: without -hourly-reset nothing ever takes the write side.
+	resetMu sync.RWMutex
 
 	hub           *hub
 	snapshotEvery int64
@@ -82,6 +93,9 @@ type boardMessage struct {
 func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	var agg *aggregatestore.Aggregate[Board]
 	var err error
 	live := true
@@ -122,6 +136,11 @@ type commandFunc func(board Board) (estoria.EntityEvent[Board], error)
 //     client can refresh and retry.
 func (s *server) runCommand(w http.ResponseWriter, r *http.Request, baseVersion int64, cmd commandFunc) {
 	ctx := r.Context()
+
+	// Held for the whole load-validate-save cycle so a demo reset can't clear
+	// the stream out from under it. Uncontended unless -hourly-reset is on.
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
 
 	var agg *aggregatestore.Aggregate[Board]
 	var err error
@@ -521,12 +540,16 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
 
 // handleWatch streams board updates to the client over server-sent events.
 func (s *server) handleWatch(w http.ResponseWriter, r *http.Request) {
+	ch, ok := s.hub.subscribe()
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "too many live connections right now — try again shortly")
+		return
+	}
+	defer s.hub.unsubscribe(ch)
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	rc := http.NewResponseController(w)
-
-	ch := s.hub.subscribe()
-	defer s.hub.unsubscribe(ch)
 
 	// send the current state immediately so a reconnecting client resyncs
 	if agg, err := s.live.Load(r.Context(), s.boardID, nil); err == nil {

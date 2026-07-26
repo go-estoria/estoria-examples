@@ -73,6 +73,13 @@ function connect() {
   es.onmessage = (e) => {
     const msg = JSON.parse(e.data);
 
+    if (msg.type === "reset") {
+      // the hosted demo clears every order on the hour; whatever this tab was
+      // looking at is gone, so start over
+      location.reload();
+      return;
+    }
+
     if (msg.type === "order") {
       // a command was saved; the aggregate advanced. The LIST doesn't move
       // yet — it waits for the outbox to update the read model.

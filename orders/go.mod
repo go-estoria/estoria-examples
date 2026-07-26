@@ -7,6 +7,7 @@ require (
 	github.com/go-estoria/estoria-contrib v0.3.2
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/jackc/pgx/v5 v5.9.2
+	golang.org/x/time v0.15.0
 )
 
 require (
