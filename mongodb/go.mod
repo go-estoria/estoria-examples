@@ -6,7 +6,7 @@ require (
 	github.com/go-estoria/estoria v0.3.1
 	github.com/go-estoria/estoria-contrib v0.3.2
 	github.com/gofrs/uuid/v5 v5.4.0
-	go.mongodb.org/mongo-driver/v2 v2.5.1
+	go.mongodb.org/mongo-driver/v2 v2.8.0
 )
 
 require (
