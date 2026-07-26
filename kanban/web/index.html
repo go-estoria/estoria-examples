@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estoria Kanban</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="bolt">⚡</span><strong>estoria</strong>&nbsp;kanban</div>
+  <h1 id="board-name" title="Click to rename">&hellip;</h1>
+  <div class="spacer"></div>
+  <span id="conn-pill" class="pill">connecting&hellip;</span>
+  <button id="panel-toggle" class="btn ghost">Under the Hood</button>
+</header>
+
+<main id="layout">
+  <section id="board" class="board" aria-label="kanban board"></section>
+
+  <aside id="panel" class="panel hidden">
+    <section class="panel-section">
+      <h2>Aggregate store stack</h2>
+      <p class="hint">Each layer implements the same four-method <code>Store[Board]</code> interface and wraps the one below it.</p>
+      <ol id="stack" class="stack"></ol>
+    </section>
+
+    <section class="panel-section">
+      <h2>Event streams</h2>
+      <p class="hint">Everything below lives in one SQLite file. Snapshots are just events in a parallel stream.</p>
+      <dl id="streams" class="streams"></dl>
+      <div id="snapshot-info" class="snapshot-info"></div>
+      <button id="conflict-btn" class="btn danger wide">⚡ Send a stale write</button>
+      <p class="hint">Sends a command based on version N&minus;1. The board is saved with
+        <code>ExpectVersion</code>, so the event store rejects the append with a
+        <code>StreamVersionMismatchError</code>, surfaced here as an HTTP 409.</p>
+    </section>
+
+    <section class="panel-section grow">
+      <h2>Activity <span class="hint-inline">(click an entry to time&#8209;travel)</span></h2>
+      <ul id="activity" class="activity"></ul>
+    </section>
+  </aside>
+</main>
+
+<footer id="timebar" class="timebar">
+  <button id="live-btn" class="btn live" title="Return to the present">LIVE</button>
+  <input id="time-slider" type="range" min="1" max="1" value="1" aria-label="board version">
+  <div id="time-label" class="time-label">v1</div>
+</footer>
+
+<div id="banner" class="banner hidden"></div>
+<div id="toasts" class="toasts"></div>
+
+<dialog id="card-modal" class="modal">
+  <form id="card-form">
+    <h3 id="modal-heading">Edit card</h3>
+    <input id="card-title" name="title" placeholder="Title" autocomplete="off" maxlength="200" required>
+    <textarea id="card-desc" name="description" placeholder="Description (optional)" rows="4"></textarea>
+    <div id="swatches" class="swatches"></div>
+    <div class="modal-actions">
+      <button type="button" id="card-delete" class="btn danger">Delete</button>
+      <span class="spacer"></span>
+      <button type="button" id="card-cancel" class="btn ghost">Cancel</button>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

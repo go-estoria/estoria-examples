@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estoria Inspector</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔍</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="glass">🔍</span><strong>estoria</strong>&nbsp;inspector</div>
+  <span id="backend-pill" class="pill">connecting&hellip;</span>
+  <span id="cap-liststreams" class="pill cap" hidden></span>
+  <span id="cap-readall" class="pill cap" hidden></span>
+  <div class="spacer"></div>
+  <label id="tail-toggle" class="tail-toggle" hidden title="Poll the global feed for new events every 2 seconds">
+    <input id="tail-checkbox" type="checkbox"> Live tail
+  </label>
+  <span class="pill readonly" title="This tool only ever reads streams; it never appends events">READ-ONLY</span>
+</header>
+
+<nav class="tabs">
+  <button id="tab-streams" class="tab active">Streams</button>
+  <button id="tab-feed" class="tab" hidden>Global feed</button>
+</nav>
+
+<main id="layout">
+  <aside id="sidebar" class="sidebar">
+    <div id="stream-browser" hidden>
+      <input id="stream-filter" class="filter" type="search" placeholder="Filter streams…" autocomplete="off">
+      <div id="stream-list" class="stream-list"></div>
+    </div>
+    <div id="stream-manual" hidden>
+      <h2>Enter a stream ID</h2>
+      <p class="hint">This backend doesn't support listing streams, but reading a known stream
+        works on <em>any</em> estoria event store via the core <code>StreamReader</code>.
+        Paste a stream ID in <code>type_uuid</code> form:</p>
+      <input id="manual-id" class="filter" type="text" placeholder="board_e5701a1a-…" autocomplete="off">
+      <button id="manual-open" class="btn primary wide">Open stream</button>
+      <p id="manual-error" class="hint error-text" hidden></p>
+    </div>
+  </aside>
+
+  <section id="main" class="main">
+    <div id="empty-state" class="empty-state">
+      <div class="empty-icon">🔍</div>
+      <p>Select a stream to inspect its events.</p>
+    </div>
+
+    <div id="stream-view" hidden>
+      <div class="view-header">
+        <h1 id="stream-title" class="mono"></h1>
+        <span id="stream-snapshot-chip" class="chip snapshot" hidden
+              title="Streams whose type ends in “snapshot” hold aggregate snapshots stored as ordinary events">📸 snapshot stream</span>
+        <div class="spacer"></div>
+        <div class="dir-toggle" role="group" aria-label="read direction">
+          <button id="dir-reverse" class="btn seg active" title="Latest events first (Direction: Reverse)">Newest first</button>
+          <button id="dir-forward" class="btn seg" title="From version 1 (Direction: Forward)">Oldest first</button>
+        </div>
+      </div>
+      <p id="stream-snapshot-hint" class="hint" hidden>
+        This stream stores <strong>aggregate snapshots as events</strong> — each payload is a serialized
+        aggregate state, appended by estoria's <code>snapshotstore/eventstream</code>. It lives in the same
+        store as any other stream, which is why the inspector can browse it.
+      </p>
+      <div class="table-wrap">
+        <table class="events">
+          <thead>
+            <tr><th class="num">version</th><th>event type</th><th>timestamp</th><th class="num">global pos</th></tr>
+          </thead>
+          <tbody id="stream-events"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button id="stream-more" class="btn" hidden>Load more</button>
+        <span id="stream-status" class="hint-inline"></span>
+      </div>
+    </div>
+
+    <div id="feed-view" hidden>
+      <div class="view-header">
+        <h1>Global feed</h1>
+        <span class="chip" title="Ordered by each event's GlobalPosition — the store-wide insertion order across all streams">global order</span>
+        <div class="spacer"></div>
+        <span id="feed-status" class="hint-inline"></span>
+      </div>
+      <p class="hint">All events across all streams, oldest at the top, newest last.
+        Live tail <strong>polls</strong> every 2 seconds — estoria event stores expose no change
+        notifications, so polling from the last seen global position is the honest way to tail.</p>
+      <div class="pager top">
+        <button id="feed-older" class="btn" hidden>Load older events</button>
+      </div>
+      <div class="table-wrap">
+        <table class="events">
+          <thead>
+            <tr><th class="num">global pos</th><th>stream</th><th class="num">version</th><th>event type</th><th>timestamp</th></tr>
+          </thead>
+          <tbody id="feed-events"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

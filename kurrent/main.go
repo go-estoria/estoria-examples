@@ -15,7 +15,6 @@ import (
 	"github.com/go-estoria/estoria/eventstore/projection"
 	"github.com/gofrs/uuid/v5"
 	"github.com/kurrent-io/KurrentDB-Client-Go/kurrentdb"
-	_ "github.com/lib/pq"
 )
 
 func main() {

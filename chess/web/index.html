@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estoria Chess</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>♞</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="knight">♞</span><strong>estoria</strong>&nbsp;chess</div>
+  <a id="lobby-link" class="btn ghost hidden" href="#/">&larr; Lobby</a>
+  <div class="spacer"></div>
+  <span id="conn-pill" class="pill">connecting&hellip;</span>
+  <button id="new-game-btn" class="btn primary">+ New game</button>
+</header>
+
+<main id="lobby-view" class="lobby">
+  <div id="game-list" class="game-list"></div>
+  <div id="lobby-empty" class="empty hidden">
+    <div class="empty-piece">♞</div>
+    <p><strong>No games yet.</strong></p>
+    <p>Start one, then open it in a second browser tab to play both sides —
+       every move is an event, and both tabs watch the same stream.</p>
+  </div>
+</main>
+
+<main id="game-view" class="game hidden">
+  <section class="board-area">
+    <div id="status-banner" class="status">&hellip;</div>
+    <div id="board" class="board" aria-label="chess board"></div>
+  </section>
+
+  <aside class="sidebar">
+    <section class="panel-section players">
+      <div class="player"><span class="side-dot w"></span><span id="white-name">White</span></div>
+      <div class="vs">vs</div>
+      <div class="player"><span class="side-dot b"></span><span id="black-name">Black</span></div>
+    </section>
+
+    <section class="panel-section grow">
+      <h2>Moves <span class="hint-inline">(click a move to replay)</span></h2>
+      <ol id="move-list" class="moves"></ol>
+    </section>
+
+    <section class="panel-section actions">
+      <div class="resign-row">
+        <button id="resign-white" class="btn danger">⚐ White resigns</button>
+        <button id="resign-black" class="btn danger">⚐ Black resigns</button>
+      </div>
+      <a id="pgn-btn" class="btn wide" download>⬇ Download PGN</a>
+      <p class="hint">Open this game in a second browser tab to play both sides.
+        The PGN is derived from the event stream on demand.</p>
+    </section>
+  </aside>
+</main>
+
+<footer id="timebar" class="timebar hidden">
+  <button id="live-btn" class="btn live" title="Return to the present">LIVE</button>
+  <input id="time-slider" type="range" min="1" max="1" value="1" aria-label="game version">
+  <div id="time-label" class="time-label">v1</div>
+</footer>
+
+<div id="banner" class="banner hidden"></div>
+<div id="toasts" class="toasts"></div>
+
+<dialog id="new-game-modal" class="modal">
+  <form id="new-game-form">
+    <h3>New game</h3>
+    <input id="white-input" name="white" placeholder="White player (default: White)" autocomplete="off" maxlength="40">
+    <input id="black-input" name="black" placeholder="Black player (default: Black)" autocomplete="off" maxlength="40">
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button type="button" id="new-game-cancel" class="btn ghost">Cancel</button>
+      <button type="submit" class="btn primary">Start game</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="promo-modal" class="modal promo">
+  <h3>Promote to</h3>
+  <div id="promo-choices" class="promo-choices"></div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

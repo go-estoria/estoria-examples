@@ -1,20 +1,27 @@
-# API Quickstart
+# MongoDB
 
-This example demonstrates the basic usage of all core [Estoria](https://github.com/go-estoria/estoria) components in a single, unannotated `main()` function.
+A walkthrough of Estoria's core components — aggregates, event stores, and
+projections — backed by [MongoDB](https://www.mongodb.com) using the
+single-collection storage strategy from
+[estoria-contrib](https://github.com/go-estoria/estoria-contrib).
 
-In-memory implementations are used wherever persistence is required so the example can be run without any additional dependencies.
+The program creates a bank-account aggregate, appends events, saves and
+reloads it, and then demonstrates lower-level event store operations: reading
+a stream through a projection, listing streams, and reading all events in
+global order.
 
-## Running the example
+## Running
 
-To run the example, run the Go program in the `main` package:
-
-```shell
-go run ./cmd
+```sh
+make up        # start MongoDB (single-node replica set) and mongo-express in Docker
+go run .       # run the walkthrough; output is printed to the console
+make mongosh   # open a mongosh shell in the container
+make down      # stop and remove the containers and volumes
 ```
 
-This will run the example code, which constructs Estoria components and then creates, saves, and retrieves an entity, appending events to modify the entity's state. Output is printed to the console.
-
-To view debug log output from Estoria, set the `DEBUG` environment variable to `true` prior to running the program.
+The mongo-express admin UI is available at http://localhost:8888 while the
+containers are up. Pass an alternate connection string as the first argument,
+and set `DEBUG=1` to see Estoria's debug logging.
 
 ## See Also
 
