@@ -15,8 +15,15 @@ import (
 // done. The wall clock is deliberate — "the board resets on the hour" is
 // something a visitor can predict, unlike an interval counted from boot.
 func (s *server) runHourlyReset(ctx context.Context) {
+	s.runResets(ctx, nextHour)
+}
+
+// runResets resets the demo at each instant produced by next, until ctx is
+// done. Splitting it from runHourlyReset is what lets a test drive the loop
+// without waiting for a real hour to elapse.
+func (s *server) runResets(ctx context.Context, next func(time.Time) time.Time) {
 	for {
-		timer := time.NewTimer(time.Until(nextHour(time.Now())))
+		timer := time.NewTimer(time.Until(next(time.Now())))
 
 		select {
 		case <-ctx.Done():

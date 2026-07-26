@@ -161,6 +161,33 @@ func TestResetDemo(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Error("connected clients were not told about the reset")
 	}
+
+	// Drive the scheduler loop itself, at 50ms instead of an hour: it is the
+	// one piece of demo-only code that runs unattended and would fail silently.
+	loopCtx, stopLoop := context.WithCancel(ctx)
+	defer stopLoop()
+
+	go srv.runResets(loopCtx, func(now time.Time) time.Time { return now.Add(50 * time.Millisecond) })
+
+	for i := range 2 {
+		select {
+		case <-watcher:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("scheduler stopped after %d resets", i)
+		}
+	}
+
+	stopLoop()
+
+	time.Sleep(200 * time.Millisecond)
+	for len(watcher) > 0 {
+		<-watcher
+	}
+	select {
+	case <-watcher:
+		t.Error("the scheduler kept resetting after its context was cancelled")
+	case <-time.After(300 * time.Millisecond):
+	}
 }
 
 func TestDeliveryLogReset(t *testing.T) {

@@ -68,13 +68,21 @@ func newTestServer(t *testing.T) *server {
 		t.Fatal(err)
 	}
 
+	// the same AfterSave broadcast main.go registers — without it the store
+	// would behave differently under test than in the app
+	broadcasts := newHub(0)
+	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Board]) error {
+		broadcasts.broadcast(boardMessage{Version: agg.Version(), Live: true, Board: agg.Entity()})
+		return nil
+	})
+
 	return &server{
 		boardID:       uuid.Must(uuid.NewV4()),
 		live:          hookable,
 		history:       eventSourced,
 		events:        eventStore,
 		db:            db,
-		hub:           newHub(0),
+		hub:           broadcasts,
 		snapshotEvery: 10,
 	}
 }
@@ -280,5 +288,59 @@ func TestHubCapacity(t *testing.T) {
 	h.unsubscribe(first)
 	if _, ok := h.subscribe(); !ok {
 		t.Error("a slot was not freed when a client disconnected")
+	}
+}
+
+// TestRunResets drives the scheduler loop itself — the one piece of demo-only
+// code that otherwise runs unattended, on a timer, and would fail silently.
+func TestRunResets(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	srv := newTestServer(t)
+	if err := seedBoard(ctx, srv.live, srv.boardID); err != nil {
+		t.Fatal(err)
+	}
+
+	// each reset reseeds, and the seed's save broadcasts through the hook
+	watcher, ok := srv.hub.subscribe()
+	if !ok {
+		t.Fatal("subscribing to the hub failed")
+	}
+
+	loopCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// fire every 20ms instead of on the hour
+	go srv.runResets(loopCtx, func(now time.Time) time.Time { return now.Add(20 * time.Millisecond) })
+
+	// the loop must keep going, not reset once and stop
+	for i := range 3 {
+		select {
+		case <-watcher:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("scheduler stopped after %d resets", i)
+		}
+	}
+
+	// the board is still the seeded one after all that resetting
+	agg, err := srv.live.Load(ctx, srv.boardID, nil)
+	if err != nil {
+		t.Fatalf("loading board after repeated resets: %v", err)
+	}
+	if agg.Version() == 0 {
+		t.Error("board is empty after a reset cycle, want the seeded board")
+	}
+
+	cancel()
+
+	time.Sleep(100 * time.Millisecond)
+	for len(watcher) > 0 {
+		<-watcher
+	}
+	select {
+	case <-watcher:
+		t.Error("the scheduler kept resetting after its context was cancelled")
+	case <-time.After(200 * time.Millisecond):
 	}
 }
