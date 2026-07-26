@@ -31,9 +31,11 @@ USER nonroot:nonroot
 # (Railway, Fly, Cloud Run, ...), falling back to :8080.
 EXPOSE 8080
 
-# Mount a volume here to keep the board across deploys; without one the
-# container starts from a freshly seeded board every time.
-VOLUME ["/data"]
+# The database lives in /data. There is deliberately no VOLUME instruction:
+# Railway rejects it ("docker VOLUME ... is not supported, use Railway Volumes"),
+# and it buys nothing here — `docker run -v name:/data` and a Railway Volume
+# mounted at /data both work without it. With no volume at all the container
+# starts from a freshly seeded board every time, which is what the hosted demo wants.
 
 # The default command is the hosted-demo configuration: the board resets on the
 # hour, writes are rate limited per client IP, and live connections are capped.

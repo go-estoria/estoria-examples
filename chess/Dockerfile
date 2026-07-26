@@ -28,12 +28,14 @@ COPY --from=build --chown=65532:65532 /data /data
 USER nonroot:nonroot
 
 # Informational only. The app listens on $PORT when the platform sets one
-# (Railway, Fly, Cloud Run, ...), falling back to :8080.
-EXPOSE 8080
+# (Railway, Fly, Cloud Run, ...), falling back to :8084.
+EXPOSE 8084
 
-# Mount a volume here to keep games across deploys; without one the container
-# starts from an empty lobby every time.
-VOLUME ["/data"]
+# The database lives in /data. There is deliberately no VOLUME instruction:
+# Railway rejects it ("docker VOLUME ... is not supported, use Railway Volumes"),
+# and it buys nothing here — `docker run -v name:/data` and a Railway Volume
+# mounted at /data both work without it. With no volume at all the container
+# starts from an empty lobby every time, which is what the hosted demo wants.
 
 # The default command is the hosted-demo configuration: the lobby is cleared on
 # the hour, writes are rate limited per client IP, and live connections are capped.
