@@ -1,0 +1,41 @@
+version: "2"
+
+# Deliberately lighter than the estoria / estoria-contrib config. These are
+# teaching examples: they use package-level demo data, print to stdout, and
+# favor readable-in-a-blog-post code over library-grade rigor. The opinionated
+# checks the libraries run (gochecknoglobals, forbidigo, godot, wrapcheck, ...)
+# would flag that style everywhere without making a single example clearer.
+#
+# What stays on is the set that catches real bugs: the standard linters plus a
+# few cheap correctness checks. Formatting is enforced separately by
+# `gofmt -l` in CI, which covers every module uniformly.
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - copyloopvar
+    - durationcheck
+    - errorlint
+    - misspell
+    - nilerr
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - usestdlibvars
+  settings:
+    misspell:
+      # `strat` is the conventional short name for an estoria-contrib storage
+      # strategy throughout these examples, not a typo for "start".
+      ignore-rules:
+        - strat
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+        path: _test\.go

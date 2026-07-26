@@ -1,20 +1,20 @@
 module github.com/go-estoria/estoria-examples/kurrent
 
-go 1.26.1
+go 1.26.2
 
 require (
-	github.com/go-estoria/estoria v0.3.0
-	github.com/go-estoria/estoria-contrib v0.1.0
-	github.com/gofrs/uuid/v5 v5.3.2
-	github.com/kurrent-io/KurrentDB-Client-Go v1.0.1
+	github.com/go-estoria/estoria v0.3.1
+	github.com/go-estoria/estoria-contrib v0.3.2
+	github.com/gofrs/uuid/v5 v5.4.0
+	github.com/kurrent-io/KurrentDB-Client-Go v1.1.2
 )
 
 require (
 	github.com/google/uuid v1.6.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
-	google.golang.org/grpc v1.71.0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	golang.org/x/net v0.51.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
+	google.golang.org/grpc v1.79.3 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
