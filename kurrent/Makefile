@@ -1,11 +1,11 @@
 .DEFAULT_GOAL := help
 .PHONY: help up down kurrent
 
-help: 
+help:
 	@echo "Available commands:"
-	@echo "  up        - Start the Kurrent container"
-	@echo "  down      - Stop and remove the Kurrent container and its volumes"
-	@echo "  kurrent   - Connect to the Kurrent database using psql"
+	@echo "  up        - Start the KurrentDB container"
+	@echo "  down      - Stop and remove the KurrentDB container and its volumes"
+	@echo "  kurrent   - Open the KurrentDB web interface in a browser"
 
 # Start the Kurrent container in detached mode.
 up:
