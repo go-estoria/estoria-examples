@@ -42,7 +42,7 @@ import (
 var boardUUID = uuid.Must(uuid.FromString("e5701a1a-b0a2-4d00-8000-000000000001"))
 
 func main() {
-	addr := flag.String("addr", ":8080", "HTTP listen address")
+	addr := flag.String("addr", defaultAddr(":8080"), "HTTP listen address")
 	dbPath := flag.String("db", "kanban.db", "path to the SQLite database file")
 	snapshotEvery := flag.Int64("snapshot-every", 10, "take an aggregate snapshot every N events")
 	flag.Parse()
@@ -62,6 +62,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+// defaultAddr honors the PORT environment variable, which is how container
+// platforms (Railway, Fly, Cloud Run, ...) tell a process where to listen.
+// An explicit -addr still wins, since flag parsing overrides this default.
+func defaultAddr(fallback string) string {
+	if port := os.Getenv("PORT"); port != "" {
+		return ":" + port
+	}
+	return fallback
 }
 
 func run(ctx context.Context, addr, dbPath string, snapshotEvery int64) error {
