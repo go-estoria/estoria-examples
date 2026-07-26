@@ -101,6 +101,13 @@ function connect() {
   es.onmessage = (e) => {
     const msg = JSON.parse(e.data);
 
+    // the hosted demo clears every game on the hour; whatever this tab was
+    // looking at is gone, so start over from the lobby
+    if (msg.reset) {
+      location.reload();
+      return;
+    }
+
     if (state.view === "lobby") {
       upsertSummary(msg);
       renderLobby();
