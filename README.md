@@ -14,12 +14,16 @@ and lints every module independently.
 
 Complete, runnable apps showing what event sourcing with Estoria looks like end to end.
 
+Two are deployed and open to poke at, both reseeded at the top of every hour:
+**[chess.demo.estoria.dev](https://chess.demo.estoria.dev)** and
+**[orders.demo.estoria.dev](https://orders.demo.estoria.dev)**.
+
 | Example | Description |
 | ------- | ----------- |
 | [Kanban](./kanban) | A real-time collaborative kanban board with a time-travel slider, live sync via SSE, optimistic concurrency surfaced in the UI, and snapshots — backed by SQLite, no Docker required. |
-| [Orders](./orders) | An order-fulfillment service on Postgres: a strict state-machine domain, the transactional outbox delivering events to a CQRS read model and webhook log, and a live admin dashboard. |
+| [Orders](./orders) ([demo](https://orders.demo.estoria.dev)) | An order-fulfillment service on Postgres: a strict state-machine domain, the transactional outbox delivering events to a CQRS read model and webhook log, and a live admin dashboard. |
 | [Fleet](./fleet) | An IoT sensor-fleet dashboard with an in-process device simulator: long streams, the full snapshotting + caching decorator stack, and a live hydration benchmark. SQLite, no Docker. |
-| [Chess](./chess) | Live two-player chess where each game is an event stream: move legality inside ApplyTo, a replay slider via ToVersion, optimistic concurrency as turn-race protection, and PGN export. SQLite, no Docker. |
+| [Chess](./chess) ([demo](https://chess.demo.estoria.dev)) | Live two-player chess where each game is an event stream: move legality inside ApplyTo, a replay slider via ToVersion, optimistic concurrency as turn-race protection, and PGN export. SQLite, no Docker. |
 | [Inspector](./inspector) | A read-only web tool for browsing any supported event store: stream lists, event paging, payload inspection, and a live global-feed tail — built on the core reader interface plus optional per-backend capabilities. |
 
 ## Backend quickstarts
