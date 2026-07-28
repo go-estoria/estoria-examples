@@ -30,10 +30,10 @@ github.com/ebitengine/purego v0.10.0 h1:QIw4xfpWT6GWTzaW5XEKy3HXoqrJGx1ijYHzTF0/
 github.com/ebitengine/purego v0.10.0/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/go-estoria/estoria v0.3.1 h1:in9qU8d7CH9jbc7mngav4oCWnRPiTg8jV8ku8Ze7TvM=
-github.com/go-estoria/estoria v0.3.1/go.mod h1:w/1pwY/YU9M4WV+HdL2vpYVAhVINFwaVf1nSPnebNJQ=
-github.com/go-estoria/estoria-contrib v0.3.2 h1:BvC4HT5WdUne8k3uOpcm3iMeGxzv1BOmvawO7KEvJJI=
-github.com/go-estoria/estoria-contrib v0.3.2/go.mod h1:HUmyzPzs3M41VhrUZvYygGtOXPpi+3UmUqy/HqtWxx0=
+github.com/go-estoria/estoria v0.4.0 h1:JUF8/SqEeoyMtmfZQMaufUbfgPG3dMN2jvW7UGlv1DM=
+github.com/go-estoria/estoria v0.4.0/go.mod h1:w/1pwY/YU9M4WV+HdL2vpYVAhVINFwaVf1nSPnebNJQ=
+github.com/go-estoria/estoria-contrib v0.4.0 h1:gDgVRdGMZddeoKsb4R4Z+aeFt3H51OG7gLSMgNtoKqM=
+github.com/go-estoria/estoria-contrib v0.4.0/go.mod h1:HUmyzPzs3M41VhrUZvYygGtOXPpi+3UmUqy/HqtWxx0=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
@@ -103,8 +103,8 @@ github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78/go.mod h1:aL8wCCfTfS
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
-go.mongodb.org/mongo-driver/v2 v2.5.1 h1:j2U/Qp+wvueSpqitLCSZPT/+ZpVc1xzuwdHWwl7d8ro=
-go.mongodb.org/mongo-driver/v2 v2.5.1/go.mod h1:yOI9kBsufol30iFsl1slpdq1I0eHPzybRWdyYUs8K/0=
+go.mongodb.org/mongo-driver/v2 v2.8.0 h1:CxWDGQYY8QQwNjAl/aq2sfWakdnWZynnqJ9F4DhHbP8=
+go.mongodb.org/mongo-driver/v2 v2.8.0/go.mod h1:yOI9kBsufol30iFsl1slpdq1I0eHPzybRWdyYUs8K/0=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.64.0 h1:ssfIgGNANqpVFCndZvcuyKbl0g+UAVcbBcqGkG28H0Y=
