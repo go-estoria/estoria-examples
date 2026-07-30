@@ -27,6 +27,7 @@ jobs:
         with:
           # gofmt is module-independent; any module's toolchain will do.
           go-version-file: kanban/go.mod
+          cache-dependency-path: kanban/go.sum
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -57,6 +58,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ matrix.module }}/go.mod
+          # Without this, setup-go looks for a go.sum at the repo root, finds
+          # none, and silently disables the module cache for every job.
+          cache-dependency-path: ${{ matrix.module }}/go.sum
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -86,6 +90,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ matrix.module }}/go.mod
+          # Without this, setup-go looks for a go.sum at the repo root, finds
+          # none, and silently disables the module cache for every job.
+          cache-dependency-path: ${{ matrix.module }}/go.sum
       - name: Build
         run: go build ./...
         working-directory: ${{ matrix.module }}
