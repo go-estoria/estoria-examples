@@ -6,8 +6,8 @@ require (
 	github.com/allegro/bigcache/v3 v3.1.0
 	github.com/go-estoria/estoria v0.4.0
 	github.com/go-estoria/estoria-contrib v0.4.4
-	github.com/gofrs/uuid/v5 v5.4.0
-	modernc.org/sqlite v1.54.0
+	github.com/gofrs/uuid/v5 v5.5.0
+	modernc.org/sqlite v1.55.0
 )
 
 require (
