@@ -15,27 +15,22 @@ import (
 
 // Event-sourced domains are easy to test: given a game, apply an event,
 // assert on the resulting state. No storage, no mocks — and because the rules
-// engine lives in ApplyTo, move legality is tested the same way.
+// engine lives in the domain (Validate gates commands, ApplyTo folds state),
+// move legality is tested the same way.
 
 // scholarsMate is 1.e4 e5 2.Bc4 Nc6 3.Qh5 Nf6?? 4.Qxf7# in UCI notation.
 var scholarsMate = []string{"e2e4", "e7e5", "f1c4", "b8c6", "d1h5", "g8f6", "h5f7"}
 
-// apply runs a sequence of events through ApplyTo, failing the test on error.
-func apply(t *testing.T, game Game, events ...estoria.EntityEvent[Game]) Game {
-	t.Helper()
+// apply runs a sequence of events through ApplyTo.
+func apply(game Game, events ...estoria.DomainEvent[Game]) Game {
 	for _, event := range events {
-		var err error
-		if game, err = event.ApplyTo(context.Background(), game); err != nil {
-			t.Fatalf("applying %T: %v", event, err)
-		}
+		game = event.ApplyTo(game)
 	}
 	return game
 }
 
-func newTestGame(t *testing.T) Game {
-	t.Helper()
-	game := NewGame(uuid.Must(uuid.NewV4()))
-	return apply(t, game, GameCreated{White: "Alice", Black: "Bob"})
+func newTestGame() Game {
+	return apply(NewGame(uuid.Must(uuid.NewV4())), GameCreated{White: "Alice", Black: "Bob"})
 }
 
 func TestEventApplication(t *testing.T) {
@@ -43,7 +38,7 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("creates a game at the starting position", func(t *testing.T) {
 		t.Parallel()
-		game := newTestGame(t)
+		game := newTestGame()
 
 		if game.White != "Alice" || game.Black != "Bob" {
 			t.Errorf("players = %q vs %q, want Alice vs Bob", game.White, game.Black)
@@ -61,7 +56,7 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("a legal move advances the position and the turn", func(t *testing.T) {
 		t.Parallel()
-		game := apply(t, newTestGame(t), MoveMade{UCI: "e2e4"})
+		game := apply(newTestGame(), MoveMade{UCI: "e2e4"})
 
 		if !strings.HasPrefix(game.FEN, "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b") {
 			t.Errorf("FEN = %q, want the position after 1.e4", game.FEN)
@@ -76,7 +71,7 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("rejects illegal moves without changing state", func(t *testing.T) {
 		t.Parallel()
-		before := apply(t, newTestGame(t), MoveMade{UCI: "e2e4"})
+		before := apply(newTestGame(), MoveMade{UCI: "e2e4"})
 
 		for name, uci := range map[string]string{
 			"pawn moving three squares": "a2a5",
@@ -84,10 +79,10 @@ func TestEventApplication(t *testing.T) {
 			"moving an empty square":    "d4d5",
 			"gibberish":                 "zz99",
 		} {
-			after, err := MoveMade{UCI: uci}.ApplyTo(context.Background(), before)
-			if err == nil {
-				t.Errorf("%s (%s): expected an error", name, uci)
+			if err := (MoveMade{UCI: uci}).Validate(before); err == nil {
+				t.Errorf("%s (%s): expected a validation error", name, uci)
 			}
+			after := MoveMade{UCI: uci}.ApplyTo(before)
 			if after.FEN != before.FEN || len(after.MovesUCI) != len(before.MovesUCI) {
 				t.Errorf("%s (%s): state changed on a rejected move", name, uci)
 			}
@@ -96,9 +91,9 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("scholar's mate ends the game by checkmate", func(t *testing.T) {
 		t.Parallel()
-		game := newTestGame(t)
+		game := newTestGame()
 		for _, uci := range scholarsMate {
-			game = apply(t, game, MoveMade{UCI: uci})
+			game = apply(game, MoveMade{UCI: uci})
 		}
 
 		if game.Outcome != "1-0" {
@@ -119,19 +114,19 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("rejects moves after the game is over", func(t *testing.T) {
 		t.Parallel()
-		game := newTestGame(t)
+		game := newTestGame()
 		for _, uci := range scholarsMate {
-			game = apply(t, game, MoveMade{UCI: uci})
+			game = apply(game, MoveMade{UCI: uci})
 		}
 
-		if _, err := (MoveMade{UCI: "e8e7"}).ApplyTo(context.Background(), game); err == nil {
+		if err := (MoveMade{UCI: "e8e7"}).Validate(game); err == nil {
 			t.Error("expected an error moving after checkmate")
 		}
 	})
 
 	t.Run("resignation ends the game in the opponent's favor", func(t *testing.T) {
 		t.Parallel()
-		game := apply(t, newTestGame(t), MoveMade{UCI: "e2e4"}, PlayerResigned{Color: "white"})
+		game := apply(newTestGame(), MoveMade{UCI: "e2e4"}, PlayerResigned{Color: "white"})
 
 		if game.Outcome != "0-1" {
 			t.Errorf("outcome = %q, want 0-1", game.Outcome)
@@ -140,7 +135,7 @@ func TestEventApplication(t *testing.T) {
 			t.Errorf("method = %q, want Resignation", game.Method)
 		}
 
-		if _, err := (PlayerResigned{Color: "black"}).ApplyTo(context.Background(), game); err == nil {
+		if err := (PlayerResigned{Color: "black"}).Validate(game); err == nil {
 			t.Error("expected an error resigning a finished game")
 		}
 	})
@@ -151,14 +146,14 @@ func TestEventApplication(t *testing.T) {
 
 		for name, tc := range map[string]struct {
 			game  Game
-			event estoria.EntityEvent[Game]
+			event gameEvent
 		}{
 			"move before creation":   {uncreated, MoveMade{UCI: "e2e4"}},
 			"resign before creation": {uncreated, PlayerResigned{Color: "white"}},
-			"double creation":        {newTestGame(t), GameCreated{White: "X", Black: "Y"}},
-			"resign a bad color":     {newTestGame(t), PlayerResigned{Color: "purple"}},
+			"double creation":        {newTestGame(), GameCreated{White: "X", Black: "Y"}},
+			"resign a bad color":     {newTestGame(), PlayerResigned{Color: "purple"}},
 		} {
-			if _, err := tc.event.ApplyTo(context.Background(), tc.game); err == nil {
+			if err := tc.event.Validate(tc.game); err == nil {
 				t.Errorf("%s: expected an error", name)
 			}
 		}
@@ -166,12 +161,10 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("does not mutate the input game", func(t *testing.T) {
 		t.Parallel()
-		before := apply(t, newTestGame(t), MoveMade{UCI: "e2e4"})
+		before := apply(newTestGame(), MoveMade{UCI: "e2e4"})
 		beforeFEN, beforeMoves := before.FEN, len(before.MovesUCI)
 
-		if _, err := (MoveMade{UCI: "e7e5"}).ApplyTo(context.Background(), before); err != nil {
-			t.Fatal(err)
-		}
+		_ = MoveMade{UCI: "e7e5"}.ApplyTo(before)
 
 		if before.FEN != beforeFEN || len(before.MovesUCI) != beforeMoves {
 			t.Errorf("input game was mutated: %+v", before)
@@ -191,7 +184,7 @@ func TestGameRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := aggregatestore.New(eventStore, NewGame,
+	store, err := aggregatestore.New(eventStore, "game", NewGame,
 		aggregatestore.WithEventTypes(gameEventPrototypes()...))
 	if err != nil {
 		t.Fatal(err)
@@ -200,14 +193,12 @@ func TestGameRoundTrip(t *testing.T) {
 	gameID := uuid.Must(uuid.NewV4())
 
 	agg := store.New(gameID)
-	if err := agg.Append(
+	agg.Append(
 		GameCreated{White: "Alice", Black: "Bob"},
 		MoveMade{UCI: "e2e4"},
 		MoveMade{UCI: "e7e5"},
 		MoveMade{UCI: "g1f3"},
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
 	if err := store.Save(ctx, agg, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +211,7 @@ func TestGameRoundTrip(t *testing.T) {
 	if v := loaded.Version(); v != 4 {
 		t.Fatalf("loaded version = %d, want 4", v)
 	}
-	if game := loaded.Entity(); len(game.MovesUCI) != 3 || game.Turn != "black" {
+	if game := loaded.State(); len(game.MovesUCI) != 3 || game.Turn != "black" {
 		t.Fatalf("loaded game = %+v, want 3 moves with black to play", game)
 	}
 
@@ -229,12 +220,12 @@ func TestGameRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	midGame := apply(t, NewGame(gameID),
+	midGame := apply(NewGame(gameID),
 		GameCreated{White: "Alice", Black: "Bob"},
 		MoveMade{UCI: "e2e4"},
 		MoveMade{UCI: "e7e5"},
 	)
-	if got := past.Entity(); got.FEN != midGame.FEN {
+	if got := past.State(); got.FEN != midGame.FEN {
 		t.Fatalf("FEN at v3 = %q, want %q", got.FEN, midGame.FEN)
 	}
 
@@ -248,16 +239,12 @@ func TestGameRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := first.Append(MoveMade{UCI: "b8c6"}); err != nil {
-		t.Fatal(err)
-	}
+	first.Append(MoveMade{UCI: "b8c6"})
 	if err := store.Save(ctx, first, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := second.Append(MoveMade{UCI: "g8f6"}); err != nil {
-		t.Fatal(err)
-	}
+	second.Append(MoveMade{UCI: "g8f6"})
 	err = store.Save(ctx, second, nil)
 	if err == nil {
 		t.Fatal("expected a version conflict saving from a stale version")

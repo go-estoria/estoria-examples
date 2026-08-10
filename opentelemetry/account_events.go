@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"time"
 
 	"github.com/go-estoria/estoria"
@@ -15,18 +13,16 @@ type AccountCreatedEvent struct {
 
 func (AccountCreatedEvent) EventType() string { return "accountcreated" }
 
-func (AccountCreatedEvent) New() estoria.EntityEvent[Account] { return &AccountCreatedEvent{} }
+func (AccountCreatedEvent) New() estoria.DomainEvent[Account] { return &AccountCreatedEvent{} }
 
-func (e AccountCreatedEvent) ApplyTo(_ context.Context, account Account) (Account, error) {
-	if !account.CreatedAt.IsZero() {
-		return account, fmt.Errorf("account already created")
-	} else if e.CreatedAt.IsZero() {
+func (e AccountCreatedEvent) ApplyTo(account Account) Account {
+	if e.CreatedAt.IsZero() {
 		e.CreatedAt = time.Now()
 	}
 
 	account.CreatedAt = e.CreatedAt
 	account.Users = append(account.Users, e.Username)
-	return account, nil
+	return account
 }
 
 type AccountDeletedEvent struct {
@@ -36,17 +32,15 @@ type AccountDeletedEvent struct {
 
 func (AccountDeletedEvent) EventType() string { return "accountdeleted" }
 
-func (AccountDeletedEvent) New() estoria.EntityEvent[Account] { return &AccountDeletedEvent{} }
+func (AccountDeletedEvent) New() estoria.DomainEvent[Account] { return &AccountDeletedEvent{} }
 
-func (e AccountDeletedEvent) ApplyTo(_ context.Context, account Account) (Account, error) {
-	if account.DeletedAt != nil {
-		return account, fmt.Errorf("account already deleted")
-	} else if e.DeletedAt.IsZero() {
+func (e AccountDeletedEvent) ApplyTo(account Account) Account {
+	if e.DeletedAt.IsZero() {
 		e.DeletedAt = time.Now()
 	}
 
 	account.DeletedAt = &e.DeletedAt
-	return account, nil
+	return account
 }
 
 type UserAddedEvent struct {
@@ -56,11 +50,11 @@ type UserAddedEvent struct {
 
 func (UserAddedEvent) EventType() string { return "useradded" }
 
-func (UserAddedEvent) New() estoria.EntityEvent[Account] { return &UserAddedEvent{} }
+func (UserAddedEvent) New() estoria.DomainEvent[Account] { return &UserAddedEvent{} }
 
-func (e UserAddedEvent) ApplyTo(_ context.Context, account Account) (Account, error) {
+func (e UserAddedEvent) ApplyTo(account Account) Account {
 	account.Users = append(account.Users, e.Username)
-	return account, nil
+	return account
 }
 
 type UserRemovedEvent struct {
@@ -70,16 +64,16 @@ type UserRemovedEvent struct {
 
 func (UserRemovedEvent) EventType() string { return "userremoved" }
 
-func (UserRemovedEvent) New() estoria.EntityEvent[Account] { return &UserRemovedEvent{} }
+func (UserRemovedEvent) New() estoria.DomainEvent[Account] { return &UserRemovedEvent{} }
 
-func (e UserRemovedEvent) ApplyTo(_ context.Context, account Account) (Account, error) {
+func (e UserRemovedEvent) ApplyTo(account Account) Account {
 	for i, user := range account.Users {
 		if user == e.Username {
 			account.Users = append(account.Users[:i], account.Users[i+1:]...)
-			return account, nil
+			break
 		}
 	}
-	return account, fmt.Errorf("user %s not found", e.Username)
+	return account
 }
 
 type BalanceChangedEvent struct {
@@ -89,9 +83,9 @@ type BalanceChangedEvent struct {
 
 func (BalanceChangedEvent) EventType() string { return "balancechanged" }
 
-func (BalanceChangedEvent) New() estoria.EntityEvent[Account] { return &BalanceChangedEvent{} }
+func (BalanceChangedEvent) New() estoria.DomainEvent[Account] { return &BalanceChangedEvent{} }
 
-func (e BalanceChangedEvent) ApplyTo(_ context.Context, account Account) (Account, error) {
+func (e BalanceChangedEvent) ApplyTo(account Account) Account {
 	account.Balance += e.Amount
-	return account, nil
+	return account
 }

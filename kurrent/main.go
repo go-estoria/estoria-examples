@@ -55,8 +55,9 @@ func main() {
 
 	var aggregateStore aggregatestore.Store[Account]
 
-	// create an event-sourced store to load and save aggregates using the event store
-	aggregateStore, err = aggregatestore.New(eventStore, NewAccount, aggregatestore.WithEventTypes(
+	// create an event-sourced store to load and save aggregates using the event store;
+	// the aggregate type name becomes part of every aggregate's stream address
+	aggregateStore, err = aggregatestore.New(eventStore, "account", NewAccount, aggregatestore.WithEventTypes(
 		AccountCreatedEvent{},
 		AccountDeletedEvent{},
 		UserAddedEvent{},
@@ -67,12 +68,12 @@ func main() {
 
 	// create a new Account aggregate
 	accountID := uuid.Must(uuid.NewV4())
-	aggregate := aggregatestore.NewAggregate(NewAccount(accountID), 0)
+	aggregate := aggregateStore.New(accountID)
 
-	fmt.Printf("created new account:\n  %s\n", aggregate.Entity())
+	fmt.Printf("created new account:\n  %s\n", aggregate.State())
 
 	// append some events to the aggregate
-	if err := aggregate.Append(
+	aggregate.Append(
 		AccountCreatedEvent{Username: "Leonardo"},
 		BalanceChangedEvent{Amount: +1000, ChangedAt: time.Now().UTC()},
 		UserAddedEvent{Username: "Michalangelo"},
@@ -81,22 +82,20 @@ func main() {
 		UserAddedEvent{Username: "Raphael"},
 		UserRemovedEvent{Username: "Michalangelo"},
 		BalanceChangedEvent{Amount: -708, ChangedAt: time.Now().UTC()},
-	); err != nil {
-		panic(err)
-	}
+	)
 
 	// save the aggregate
 	if err := aggregateStore.Save(ctx, aggregate, nil); err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("saved account:\n  %s\n", aggregate.Entity())
+	fmt.Printf("saved account:\n  %s\n", aggregate.State())
 
 	// load the aggregate
 	loadedAggregate, err := aggregateStore.Load(ctx, accountID, nil)
 	check(err)
 
-	fmt.Printf("loaded account:\n  %s\n", loadedAggregate.Entity())
+	fmt.Printf("loaded account:\n  %s\n", loadedAggregate.State())
 
 	//
 	// the below demonstrates some lower-level event store operations
@@ -114,7 +113,7 @@ func main() {
 	fmt.Println()
 	fmt.Printf("events in stream %s:\n", aggregate.ID())
 	_, err = proj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
-		fmt.Printf("  %s @%d %s %s\n", evt.StreamID.ShortString(), evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.Type)
+		fmt.Printf("  %s @%d %s %s\n", evt.StreamID.String(), evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.Type)
 		return nil
 	}))
 	check(err)
@@ -125,7 +124,7 @@ func main() {
 	// fmt.Println()
 	// fmt.Println("all streams in event store:")
 	// for _, stream := range streams {
-	// 	fmt.Printf("  %s @%d\n", stream.StreamID.ShortString(), stream.LastOffset)
+	// 	fmt.Printf("  %s @%d\n", stream.StreamID.String(), stream.LastOffset)
 	// }
 
 	// // some event stores, such as this one, support reading all events in the store (global ordering)
@@ -140,7 +139,7 @@ func main() {
 	// fmt.Println()
 	// fmt.Println("all events in event store:")
 	// _, err = allProj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
-	// 	fmt.Printf("  %s @%d %s\n", evt.StreamID.ShortString(), evt.StreamVersion, evt.ID.ShortString())
+	// 	fmt.Printf("  %s @%d %s\n", evt.StreamID.String(), evt.StreamVersion, evt.ID.String())
 	// 	return nil
 	// }))
 	// check(err)

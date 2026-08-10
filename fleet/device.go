@@ -3,7 +3,6 @@ package main
 import (
 	"time"
 
-	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
 )
 
@@ -40,14 +39,9 @@ type Device struct {
 	ActiveAlerts map[string]string `json:"activeAlerts,omitempty"`
 }
 
-// NewDevice is the estoria.EntityFactory for Device aggregates.
+// NewDevice is the estoria.StateFactory for Device aggregates.
 func NewDevice(id uuid.UUID) Device {
 	return Device{ID: id}
-}
-
-// EntityID implements estoria.Entity.
-func (d Device) EntityID() typeid.ID {
-	return typeid.New("device", d.ID)
 }
 
 // clone returns a deep copy of the device so that ApplyTo implementations can

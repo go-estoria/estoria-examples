@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
 	"github.com/notnil/chess"
 )
@@ -23,14 +22,9 @@ type Game struct {
 	Check    bool      `json:"check"`   // the side to move is in check
 }
 
-// NewGame is the estoria.EntityFactory for Game aggregates.
+// NewGame is the estoria.StateFactory for Game aggregates.
 func NewGame(id uuid.UUID) Game {
 	return Game{ID: id}
-}
-
-// EntityID implements estoria.Entity.
-func (g Game) EntityID() typeid.ID {
-	return typeid.New("game", g.ID)
 }
 
 // Created reports whether the game has been initialized by a GameCreated event.

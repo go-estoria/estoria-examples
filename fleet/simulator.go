@@ -137,7 +137,7 @@ func (s *simulator) runDevice(ctx context.Context, id uuid.UUID) {
 	// walker state seeded from the device's persisted last reading
 	temp, humidity := baseline, 50.0
 	if agg, err := s.store.Load(ctx, id, nil); err == nil {
-		if d := agg.Entity(); d.ReadingCount > 0 {
+		if d := agg.State(); d.ReadingCount > 0 {
 			temp, humidity = d.LastReading.TempC, d.LastReading.Humidity
 		}
 	}
@@ -157,17 +157,14 @@ func (s *simulator) runDevice(ctx context.Context, id uuid.UUID) {
 			log.Error("simulator: loading device", "error", err)
 			continue
 		}
-		device := agg.Entity()
+		device := agg.State()
 
 		events := s.tick(&temp, &humidity, &offlineTicks, baseline, device)
 		if len(events) == 0 {
 			continue
 		}
 
-		if err := agg.Append(events...); err != nil {
-			log.Error("simulator: appending events", "error", err)
-			continue
-		}
+		agg.Append(events...)
 		if err := s.store.Save(ctx, agg, nil); err != nil {
 			log.Error("simulator: saving device", "error", err)
 		}
@@ -177,12 +174,12 @@ func (s *simulator) runDevice(ctx context.Context, id uuid.UUID) {
 // tick advances the random walk one step and derives the events for it.
 // The alert rule (overheat above 30°C, cleared below 28°C) lives here, not in
 // the domain: the aggregate is a pure recorder of what the fleet reported.
-func (s *simulator) tick(temp, humidity *float64, offlineTicks *int, baseline float64, device Device) []estoria.EntityEvent[Device] {
+func (s *simulator) tick(temp, humidity *float64, offlineTicks *int, baseline float64, device Device) []estoria.DomainEvent[Device] {
 	// offline devices skip readings until they come back
 	if device.Status == "offline" {
 		*offlineTicks--
 		if *offlineTicks <= 0 {
-			return []estoria.EntityEvent[Device]{StatusChanged{Status: "online"}}
+			return []estoria.DomainEvent[Device]{StatusChanged{Status: "online"}}
 		}
 		return nil
 	}
@@ -190,7 +187,7 @@ func (s *simulator) tick(temp, humidity *float64, offlineTicks *int, baseline fl
 	// ~1% chance per tick of dropping offline for a few ticks
 	if rand.Float64() < 0.01 {
 		*offlineTicks = 2 + rand.IntN(4)
-		return []estoria.EntityEvent[Device]{StatusChanged{Status: "offline"}}
+		return []estoria.DomainEvent[Device]{StatusChanged{Status: "offline"}}
 	}
 
 	// temperature: bounded random walk with gentle pull toward the baseline
@@ -207,7 +204,7 @@ func (s *simulator) tick(temp, humidity *float64, offlineTicks *int, baseline fl
 		battery = 100
 	}
 
-	events := []estoria.EntityEvent[Device]{ReadingRecorded{
+	events := []estoria.DomainEvent[Device]{ReadingRecorded{
 		At:         time.Now().UTC(),
 		TempC:      round1(*temp),
 		Humidity:   round1(*humidity),
@@ -276,9 +273,7 @@ func registerDevices(ctx context.Context, store aggregatestore.Store[Device], re
 
 		// v7 UUIDs are k-sortable, so device IDs sort by registration time
 		agg := store.New(uuid.Must(uuid.NewV7()))
-		if err := agg.Append(event); err != nil {
-			return fmt.Errorf("registering device %q: %w", event.Name, err)
-		}
+		agg.Append(event)
 		if err := store.Save(ctx, agg, nil); err != nil {
 			return fmt.Errorf("saving device %q: %w", event.Name, err)
 		}

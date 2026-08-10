@@ -20,6 +20,7 @@ import (
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
 	"github.com/go-estoria/estoria/eventstore/projection"
+	streamsnapshots "github.com/go-estoria/estoria/snapshotstore/eventstream"
 	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
 )
@@ -119,12 +120,12 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, boardMessage{Version: agg.Version(), Live: live, Board: agg.Entity()})
+	writeJSON(w, http.StatusOK, boardMessage{Version: agg.Version(), Live: live, Board: agg.State()})
 }
 
 // A commandFunc validates a command against the board state it is based on
 // and returns the resulting event.
-type commandFunc func(board Board) (estoria.EntityEvent[Board], error)
+type commandFunc func(board Board) (estoria.DomainEvent[Board], error)
 
 // runCommand is the write path shared by all commands:
 //
@@ -154,16 +155,13 @@ func (s *server) runCommand(w http.ResponseWriter, r *http.Request, baseVersion 
 		return
 	}
 
-	event, err := cmd(agg.Entity())
+	event, err := cmd(agg.State())
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
-	if err := agg.Append(event); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+	agg.Append(event)
 
 	if err := s.live.Save(ctx, agg, nil); err != nil {
 		var mismatch eventstore.StreamVersionMismatchError
@@ -196,7 +194,7 @@ func (s *server) handleRenameBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(Board) (estoria.EntityEvent[Board], error) {
+	s.runCommand(w, r, req.BaseVersion, func(Board) (estoria.DomainEvent[Board], error) {
 		name, err := requireTitle(req.Name, "board name")
 		if err != nil {
 			return nil, err
@@ -215,7 +213,7 @@ func (s *server) handleAddColumn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(Board) (estoria.EntityEvent[Board], error) {
+	s.runCommand(w, r, req.BaseVersion, func(Board) (estoria.DomainEvent[Board], error) {
 		title, err := requireTitle(req.Title, "column title")
 		if err != nil {
 			return nil, err
@@ -235,7 +233,7 @@ func (s *server) handleRenameColumn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.EntityEvent[Board], error) {
+	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.DomainEvent[Board], error) {
 		title, err := requireTitle(req.Title, "column title")
 		if err != nil {
 			return nil, err
@@ -260,7 +258,7 @@ func (s *server) handleAddCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.EntityEvent[Board], error) {
+	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.DomainEvent[Board], error) {
 		title, err := requireTitle(req.Title, "card title")
 		if err != nil {
 			return nil, err
@@ -291,7 +289,7 @@ func (s *server) handleEditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.EntityEvent[Board], error) {
+	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.DomainEvent[Board], error) {
 		title, err := requireTitle(req.Title, "card title")
 		if err != nil {
 			return nil, err
@@ -320,7 +318,7 @@ func (s *server) handleMoveCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.EntityEvent[Board], error) {
+	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.DomainEvent[Board], error) {
 		if !board.HasCard(cardID) {
 			return nil, fmt.Errorf("card %s does not exist", cardID)
 		}
@@ -341,7 +339,7 @@ func (s *server) handleDeleteCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.EntityEvent[Board], error) {
+	s.runCommand(w, r, req.BaseVersion, func(board Board) (estoria.DomainEvent[Board], error) {
 		if !board.HasCard(cardID) {
 			return nil, fmt.Errorf("card %s does not exist", cardID)
 		}
@@ -516,7 +514,9 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// the latest snapshot is the last event in the snapshot stream
+	// The latest snapshot is the last event in the snapshot stream. The event
+	// body is the board state itself; the aggregate version the snapshot
+	// captures rides in the event's metadata.
 	if stats.SnapshotCount > 0 {
 		iter, err := s.events.ReadStream(ctx, snapshotStreamID, eventstore.ReadStreamOptions{
 			Direction: eventstore.Reverse,
@@ -525,11 +525,8 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			defer iter.Close(ctx)
 			if evt, err := iter.Next(ctx); err == nil {
-				var snap struct {
-					AggregateVersion int64
-				}
-				if json.Unmarshal(evt.Data, &snap) == nil {
-					stats.LastSnapshotVersion = snap.AggregateVersion
+				if v, err := strconv.ParseInt(evt.Metadata[streamsnapshots.SnapshotVersionMetadataKey], 10, 64); err == nil {
+					stats.LastSnapshotVersion = v
 				}
 			}
 		}
@@ -553,7 +550,7 @@ func (s *server) handleWatch(w http.ResponseWriter, r *http.Request) {
 
 	// send the current state immediately so a reconnecting client resyncs
 	if agg, err := s.live.Load(r.Context(), s.boardID, nil); err == nil {
-		msg, _ := json.Marshal(boardMessage{Version: agg.Version(), Live: true, Board: agg.Entity()})
+		msg, _ := json.Marshal(boardMessage{Version: agg.Version(), Live: true, Board: agg.State()})
 		fmt.Fprintf(w, "data: %s\n\n", msg)
 	}
 	if err := rc.Flush(); err != nil {

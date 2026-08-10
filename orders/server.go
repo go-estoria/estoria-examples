@@ -113,10 +113,7 @@ func (s *server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	agg := s.orders.New(typeid.NewV7("order").UUID)
 
-	if err := agg.Append(randomOrder()); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+	agg.Append(randomOrder())
 
 	if err := s.orders.Save(r.Context(), agg, nil); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -124,7 +121,7 @@ func (s *server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":      agg.Entity().ID,
+		"id":      agg.State().ID,
 		"version": agg.Version(),
 	})
 }
@@ -155,14 +152,14 @@ func (s *server) handleGetOrder(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version":  agg.Version(),
-		"order":    agg.Entity(),
+		"order":    agg.State(),
 		"timeline": timeline,
 	})
 }
 
 // A commandFunc validates a command against the order state it is based on
 // and returns the resulting event.
-type commandFunc func(order Order) (estoria.EntityEvent[Order], error)
+type commandFunc func(order Order) (estoria.DomainEvent[Order], error)
 
 // runCommand is the write path shared by all fulfillment commands:
 //
@@ -197,16 +194,13 @@ func (s *server) runCommand(w http.ResponseWriter, r *http.Request, baseVersion 
 		return
 	}
 
-	event, err := cmd(agg.Entity())
+	event, err := cmd(agg.State())
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
-	if err := agg.Append(event); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+	agg.Append(event)
 
 	if err := s.orders.Save(ctx, agg, nil); err != nil {
 		var mismatch eventstore.StreamVersionMismatchError
@@ -241,7 +235,7 @@ func (s *server) handlePay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.EntityEvent[Order], error) {
+	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.DomainEvent[Order], error) {
 		if o.Status != StatusPlaced {
 			return nil, fmt.Errorf("cannot pay an order in status %q", o.Status)
 		}
@@ -256,7 +250,7 @@ func (s *server) handlePick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.EntityEvent[Order], error) {
+	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.DomainEvent[Order], error) {
 		if o.Status != StatusPaid {
 			return nil, fmt.Errorf("cannot pick an order in status %q", o.Status)
 		}
@@ -271,7 +265,7 @@ func (s *server) handleShip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.EntityEvent[Order], error) {
+	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.DomainEvent[Order], error) {
 		if o.Status != StatusPicked {
 			return nil, fmt.Errorf("cannot ship an order in status %q", o.Status)
 		}
@@ -286,7 +280,7 @@ func (s *server) handleDeliver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.EntityEvent[Order], error) {
+	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.DomainEvent[Order], error) {
 		if o.Status != StatusShipped {
 			return nil, fmt.Errorf("cannot deliver an order in status %q", o.Status)
 		}
@@ -304,7 +298,7 @@ func (s *server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.EntityEvent[Order], error) {
+	s.runCommand(w, r, req.BaseVersion, func(o Order) (estoria.DomainEvent[Order], error) {
 		switch o.Status {
 		case StatusPlaced, StatusPaid, StatusPicked:
 			reason := strings.TrimSpace(req.Reason)

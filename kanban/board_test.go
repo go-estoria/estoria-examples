@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/go-estoria/estoria"
@@ -20,27 +21,21 @@ func TestEventApplication(t *testing.T) {
 
 	base := func() Board {
 		board := NewBoard(uuid.Must(uuid.NewV4()))
-		for _, event := range []estoria.EntityEvent[Board]{
+		for _, event := range []estoria.DomainEvent[Board]{
 			BoardCreated{Name: "Test"},
 			ColumnAdded{ColumnID: "todo", Title: "To Do"},
 			ColumnAdded{ColumnID: "done", Title: "Done"},
 			CardAdded{CardID: "c1", ColumnID: "todo", Title: "first"},
 			CardAdded{CardID: "c2", ColumnID: "todo", Title: "second"},
 		} {
-			var err error
-			if board, err = event.ApplyTo(context.Background(), board); err != nil {
-				t.Fatalf("applying setup event: %v", err)
-			}
+			board = event.ApplyTo(board)
 		}
 		return board
 	}
 
 	t.Run("moves a card between columns", func(t *testing.T) {
 		t.Parallel()
-		board, err := CardMoved{CardID: "c1", ToColumn: "done", ToIndex: 0}.ApplyTo(context.Background(), base())
-		if err != nil {
-			t.Fatal(err)
-		}
+		board := CardMoved{CardID: "c1", ToColumn: "done", ToIndex: 0}.ApplyTo(base())
 
 		if got := board.column("todo").Cards; len(got) != 1 || got[0].ID != "c2" {
 			t.Errorf("todo column = %+v, want only c2", got)
@@ -52,10 +47,7 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("clamps an out-of-range move index", func(t *testing.T) {
 		t.Parallel()
-		board, err := CardMoved{CardID: "c1", ToColumn: "todo", ToIndex: 99}.ApplyTo(context.Background(), base())
-		if err != nil {
-			t.Fatal(err)
-		}
+		board := CardMoved{CardID: "c1", ToColumn: "todo", ToIndex: 99}.ApplyTo(base())
 
 		if got := board.column("todo").Cards; len(got) != 2 || got[1].ID != "c1" {
 			t.Errorf("todo column = %+v, want c1 moved to the end", got)
@@ -64,10 +56,7 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("edits a card in place", func(t *testing.T) {
 		t.Parallel()
-		board, err := CardEdited{CardID: "c2", Title: "renamed", Color: "teal"}.ApplyTo(context.Background(), base())
-		if err != nil {
-			t.Fatal(err)
-		}
+		board := CardEdited{CardID: "c2", Title: "renamed", Color: "teal"}.ApplyTo(base())
 
 		card := board.column("todo").Cards[1]
 		if card.Title != "renamed" || card.Color != "teal" {
@@ -77,30 +66,29 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("removes a card", func(t *testing.T) {
 		t.Parallel()
-		board, err := CardRemoved{CardID: "c1"}.ApplyTo(context.Background(), base())
-		if err != nil {
-			t.Fatal(err)
-		}
+		board := CardRemoved{CardID: "c1"}.ApplyTo(base())
 
 		if board.HasCard("c1") {
 			t.Error("card c1 still present after removal")
 		}
 	})
 
-	t.Run("rejects invalid transitions", func(t *testing.T) {
+	// ApplyTo is total: a persisted event is a fact, and applying one cannot
+	// fail. Commands referencing missing cards or columns are rejected in the
+	// HTTP handlers before any event is appended; if such an event were ever
+	// applied anyway, it leaves the board unchanged.
+	t.Run("leaves the board unchanged for unknown cards and columns", func(t *testing.T) {
 		t.Parallel()
-		for name, event := range map[string]estoria.EntityEvent[Board]{
-			"add to unknown column":  CardAdded{CardID: "c9", ColumnID: "nope", Title: "x"},
-			"add duplicate card":     CardAdded{CardID: "c1", ColumnID: "todo", Title: "x"},
+		for name, event := range map[string]estoria.DomainEvent[Board]{
 			"move unknown card":      CardMoved{CardID: "nope", ToColumn: "done"},
 			"move to unknown column": CardMoved{CardID: "c1", ToColumn: "nope"},
 			"edit unknown card":      CardEdited{CardID: "nope", Title: "x"},
 			"remove unknown card":    CardRemoved{CardID: "nope"},
-			"add duplicate column":   ColumnAdded{ColumnID: "todo", Title: "x"},
 			"rename unknown column":  ColumnRenamed{ColumnID: "nope", Title: "x"},
 		} {
-			if _, err := event.ApplyTo(context.Background(), base()); err == nil {
-				t.Errorf("%s: expected an error", name)
+			before := base()
+			if after := event.ApplyTo(before); !reflect.DeepEqual(after, before) {
+				t.Errorf("%s: board changed: %+v", name, after)
 			}
 		}
 	})
@@ -108,9 +96,7 @@ func TestEventApplication(t *testing.T) {
 	t.Run("does not mutate the input board", func(t *testing.T) {
 		t.Parallel()
 		before := base()
-		if _, err := (CardMoved{CardID: "c1", ToColumn: "done", ToIndex: 0}).ApplyTo(context.Background(), before); err != nil {
-			t.Fatal(err)
-		}
+		CardMoved{CardID: "c1", ToColumn: "done", ToIndex: 0}.ApplyTo(before)
 
 		if got := before.column("todo").Cards; len(got) != 2 {
 			t.Errorf("input board was mutated: todo column = %+v", got)
@@ -129,7 +115,7 @@ func TestBoardRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := aggregatestore.New(eventStore, NewBoard,
+	store, err := aggregatestore.New(eventStore, "board", NewBoard,
 		aggregatestore.WithEventTypes(boardEventPrototypes()...))
 	if err != nil {
 		t.Fatal(err)
@@ -138,13 +124,11 @@ func TestBoardRoundTrip(t *testing.T) {
 	boardID := uuid.Must(uuid.NewV4())
 
 	agg := store.New(boardID)
-	if err := agg.Append(
+	agg.Append(
 		BoardCreated{Name: "Round Trip"},
 		ColumnAdded{ColumnID: "todo", Title: "To Do"},
 		CardAdded{CardID: "c1", ColumnID: "todo", Title: "hello"},
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
 	if err := store.Save(ctx, agg, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +141,7 @@ func TestBoardRoundTrip(t *testing.T) {
 	if v := loaded.Version(); v != 3 {
 		t.Fatalf("loaded version = %d, want 3", v)
 	}
-	if board := loaded.Entity(); !board.HasCard("c1") || board.Name != "Round Trip" {
+	if board := loaded.State(); !board.HasCard("c1") || board.Name != "Round Trip" {
 		t.Fatalf("loaded board = %+v, want name 'Round Trip' with card c1", board)
 	}
 
@@ -166,7 +150,7 @@ func TestBoardRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if board := past.Entity(); board.HasCard("c1") || !board.HasColumn("todo") {
+	if board := past.State(); board.HasCard("c1") || !board.HasColumn("todo") {
 		t.Fatalf("board at v2 = %+v, want the column but not the card", board)
 	}
 
@@ -180,16 +164,12 @@ func TestBoardRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := first.Append(CardAdded{CardID: "c2", ColumnID: "todo", Title: "winner"}); err != nil {
-		t.Fatal(err)
-	}
+	first.Append(CardAdded{CardID: "c2", ColumnID: "todo", Title: "winner"})
 	if err := store.Save(ctx, first, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := second.Append(CardAdded{CardID: "c3", ColumnID: "todo", Title: "loser"}); err != nil {
-		t.Fatal(err)
-	}
+	second.Append(CardAdded{CardID: "c3", ColumnID: "todo", Title: "loser"})
 	err = store.Save(ctx, second, nil)
 	if err == nil {
 		t.Fatal("expected a version conflict saving from a stale version")

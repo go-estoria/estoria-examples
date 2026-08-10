@@ -1,22 +1,21 @@
 package main
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"time"
 
 	"github.com/go-estoria/estoria"
 )
 
-// Each event below implements estoria.EntityEvent[Device]. The prototypes are
+// Each event below implements estoria.DomainEvent[Device]. The prototypes are
 // value-typed (New returns a value, not a pointer); estoria handles making
-// them addressable for unmarshaling. ApplyTo implementations are pure state
-// transitions: they clone the device, apply the change, and return the result.
+// them addressable for unmarshaling. ApplyTo implementations are total, pure
+// state transitions: they clone the device, apply the change, and return the
+// result.
 //
-// The domain is a pure recorder: it captures what the sensor reported and
-// enforces internal consistency (no duplicate alerts, no unknown statuses),
-// but the rules that *decide* when to raise an alert live in the simulator.
+// The domain is a pure recorder: it captures what the sensor reported. The
+// rules that *decide* what to record — when to raise an alert, which statuses
+// exist — live in the simulator, which validates against the state it loaded
+// before appending events.
 
 // DeviceRegistered creates a device. A freshly registered device is online
 // with a full battery.
@@ -28,12 +27,9 @@ type DeviceRegistered struct {
 }
 
 func (DeviceRegistered) EventType() string                { return "deviceregistered" }
-func (DeviceRegistered) New() estoria.EntityEvent[Device] { return DeviceRegistered{} }
-func (e DeviceRegistered) ApplyTo(_ context.Context, d Device) (Device, error) {
-	if d.Registered() {
-		return d, fmt.Errorf("device %s is already registered", d.ID)
-	}
+func (DeviceRegistered) New() estoria.DomainEvent[Device] { return DeviceRegistered{} }
 
+func (e DeviceRegistered) ApplyTo(d Device) Device {
 	next := d.clone()
 	next.Name = e.Name
 	next.Model = e.Model
@@ -41,7 +37,7 @@ func (e DeviceRegistered) ApplyTo(_ context.Context, d Device) (Device, error) {
 	next.Firmware = e.Firmware
 	next.Status = "online"
 	next.BatteryPct = 100
-	return next, nil
+	return next
 }
 
 // ReadingRecorded captures one sensor measurement. This is the event that
@@ -56,8 +52,9 @@ type ReadingRecorded struct {
 }
 
 func (ReadingRecorded) EventType() string                { return "readingrecorded" }
-func (ReadingRecorded) New() estoria.EntityEvent[Device] { return ReadingRecorded{} }
-func (e ReadingRecorded) ApplyTo(_ context.Context, d Device) (Device, error) {
+func (ReadingRecorded) New() estoria.DomainEvent[Device] { return ReadingRecorded{} }
+
+func (e ReadingRecorded) ApplyTo(d Device) Device {
 	next := d.clone()
 	next.BatteryPct = e.BatteryPct
 	next.LastReading = Reading{At: e.At, TempC: e.TempC, Humidity: e.Humidity}
@@ -75,7 +72,7 @@ func (e ReadingRecorded) ApplyTo(_ context.Context, d Device) (Device, error) {
 		next.MaxTempC = max(next.MaxTempC, e.TempC)
 	}
 	next.ReadingCount++
-	return next, nil
+	return next
 }
 
 // StatusChanged marks the device online or offline.
@@ -84,15 +81,12 @@ type StatusChanged struct {
 }
 
 func (StatusChanged) EventType() string                { return "statuschanged" }
-func (StatusChanged) New() estoria.EntityEvent[Device] { return StatusChanged{} }
-func (e StatusChanged) ApplyTo(_ context.Context, d Device) (Device, error) {
-	if e.Status != "online" && e.Status != "offline" {
-		return d, fmt.Errorf("unknown status %q", e.Status)
-	}
+func (StatusChanged) New() estoria.DomainEvent[Device] { return StatusChanged{} }
 
+func (e StatusChanged) ApplyTo(d Device) Device {
 	next := d.clone()
 	next.Status = e.Status
-	return next, nil
+	return next
 }
 
 // FirmwareUpdated records a firmware version change.
@@ -101,15 +95,12 @@ type FirmwareUpdated struct {
 }
 
 func (FirmwareUpdated) EventType() string                { return "firmwareupdated" }
-func (FirmwareUpdated) New() estoria.EntityEvent[Device] { return FirmwareUpdated{} }
-func (e FirmwareUpdated) ApplyTo(_ context.Context, d Device) (Device, error) {
-	if e.Version == "" {
-		return d, errors.New("firmware version is required")
-	}
+func (FirmwareUpdated) New() estoria.DomainEvent[Device] { return FirmwareUpdated{} }
 
+func (e FirmwareUpdated) ApplyTo(d Device) Device {
 	next := d.clone()
 	next.Firmware = e.Version
-	return next, nil
+	return next
 }
 
 // AlertRaised activates an alert of a given kind (e.g. "overheat").
@@ -119,44 +110,36 @@ type AlertRaised struct {
 }
 
 func (AlertRaised) EventType() string                { return "alertraised" }
-func (AlertRaised) New() estoria.EntityEvent[Device] { return AlertRaised{} }
-func (e AlertRaised) ApplyTo(_ context.Context, d Device) (Device, error) {
-	if e.Kind == "" {
-		return d, errors.New("alert kind is required")
-	}
-	if d.HasAlert(e.Kind) {
-		return d, fmt.Errorf("alert %q is already active", e.Kind)
-	}
+func (AlertRaised) New() estoria.DomainEvent[Device] { return AlertRaised{} }
 
+func (e AlertRaised) ApplyTo(d Device) Device {
 	next := d.clone()
 	if next.ActiveAlerts == nil {
 		next.ActiveAlerts = make(map[string]string, 1)
 	}
 	next.ActiveAlerts[e.Kind] = e.Message
-	return next, nil
+	return next
 }
 
-// AlertCleared deactivates a previously raised alert.
+// AlertCleared deactivates a previously raised alert. Clearing an alert that
+// is not active leaves the state unchanged.
 type AlertCleared struct {
 	Kind string `json:"kind"`
 }
 
 func (AlertCleared) EventType() string                { return "alertcleared" }
-func (AlertCleared) New() estoria.EntityEvent[Device] { return AlertCleared{} }
-func (e AlertCleared) ApplyTo(_ context.Context, d Device) (Device, error) {
-	if !d.HasAlert(e.Kind) {
-		return d, fmt.Errorf("alert %q is not active", e.Kind)
-	}
+func (AlertCleared) New() estoria.DomainEvent[Device] { return AlertCleared{} }
 
+func (e AlertCleared) ApplyTo(d Device) Device {
 	next := d.clone()
 	delete(next.ActiveAlerts, e.Kind)
-	return next, nil
+	return next
 }
 
 // deviceEventPrototypes lists every event type for registration with the
 // aggregate store.
-func deviceEventPrototypes() []estoria.EntityEvent[Device] {
-	return []estoria.EntityEvent[Device]{
+func deviceEventPrototypes() []estoria.DomainEvent[Device] {
+	return []estoria.DomainEvent[Device]{
 		DeviceRegistered{},
 		ReadingRecorded{},
 		StatusChanged{},

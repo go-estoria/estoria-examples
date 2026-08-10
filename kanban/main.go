@@ -146,8 +146,9 @@ func run(ctx context.Context, addr, dbPath string, snapshotEvery int64, demo dem
 	// aggregatestore.Store[Board], so they compose freely.
 
 	// 1. EventSourcedStore: hydrates by replaying events, saves with
-	//    optimistic concurrency (ExpectVersion).
-	eventSourced, err := aggregatestore.New(eventStore, NewBoard,
+	//    optimistic concurrency (ExpectVersion). The aggregate type name
+	//    becomes part of every aggregate's stream address.
+	eventSourced, err := aggregatestore.New(eventStore, "board", NewBoard,
 		aggregatestore.WithEventTypes(boardEventPrototypes()...))
 	if err != nil {
 		return fmt.Errorf("creating aggregate store: %w", err)
@@ -157,9 +158,9 @@ func run(ctx context.Context, addr, dbPath string, snapshotEvery int64, demo dem
 	//    start from the latest snapshot instead of replaying from scratch.
 	//    Snapshots are stored as events in a parallel "boardsnapshot" stream
 	//    in the same SQLite database — no separate snapshot storage needed.
-	snapshotting, err := aggregatestore.NewSnapshottingStore[Board](
+	snapshotting, err := aggregatestore.NewSnapshottingStore(
 		eventSourced,
-		streamsnapshots.NewEventStreamStore(eventStore),
+		streamsnapshots.New(eventStore),
 		snapshotstore.EventCountSnapshotPolicy{N: snapshotEvery},
 	)
 	if err != nil {
@@ -168,14 +169,14 @@ func run(ctx context.Context, addr, dbPath string, snapshotEvery int64, demo dem
 
 	// 3. HookableStore: lifecycle hooks. The AfterSave hook is what makes the
 	//    app collaborative: every saved change is pushed to all SSE clients.
-	hookable, err := aggregatestore.NewHookableStore[Board](snapshotting)
+	hookable, err := aggregatestore.NewHookableStore(snapshotting)
 	if err != nil {
 		return fmt.Errorf("creating hookable store: %w", err)
 	}
 
 	broadcasts := newHub(demo.maxClients)
 	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Board]) error {
-		broadcasts.broadcast(boardMessage{Version: agg.Version(), Live: true, Board: agg.Entity()})
+		broadcasts.broadcast(boardMessage{Version: agg.Version(), Live: true, Board: agg.State()})
 		return nil
 	})
 
@@ -246,7 +247,7 @@ func seedBoard(ctx context.Context, store aggregatestore.Store[Board], id uuid.U
 	conflictCard := newID("card")
 
 	agg := store.New(id)
-	if err := agg.Append(
+	agg.Append(
 		BoardCreated{Name: "Estoria Kanban"},
 		ColumnAdded{ColumnID: todo, Title: "To Do"},
 		ColumnAdded{ColumnID: doing, Title: "In Progress"},
@@ -267,9 +268,7 @@ func seedBoard(ctx context.Context, store aggregatestore.Store[Board], id uuid.U
 		CardMoved{CardID: snapshotCard, ToColumn: doing, ToIndex: 1},
 		CardEdited{CardID: dragCard, Title: "Drag a card to another column",
 			Description: "Every drop appends a CardMoved event to the board's event stream. Nothing is ever updated in place. (This description was itself a CardEdited event — check the activity feed.)", Color: "blue"},
-	); err != nil {
-		return err
-	}
+	)
 
 	return store.Save(ctx, agg, nil)
 }
