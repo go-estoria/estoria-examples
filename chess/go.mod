@@ -3,8 +3,8 @@ module github.com/go-estoria/estoria-examples/chess
 go 1.26.2
 
 require (
-	github.com/go-estoria/estoria v0.7.0
-	github.com/go-estoria/estoria-contrib v0.7.0
+	github.com/go-estoria/estoria v0.8.0
+	github.com/go-estoria/estoria-contrib v0.8.0
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/notnil/chess v1.10.0
 	golang.org/x/time v0.15.0

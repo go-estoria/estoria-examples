@@ -206,7 +206,10 @@ func TestSnapshotRoundTrip(t *testing.T) {
 
 	// the event-stream snapshot store works over any event store, including
 	// the in-memory one used here
-	snapStore := streamsnapshots.New(eventStore)
+	snapStore, err := streamsnapshots.New(eventStore)
+	if err != nil {
+		t.Fatal(err)
+	}
 	const snapshotEvery = 25
 	snapshotting, err := aggregatestore.NewSnapshottingStore(
 		plain, snapStore, snapshotstore.EventCountSnapshotPolicy{N: snapshotEvery})

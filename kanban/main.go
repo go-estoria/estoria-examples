@@ -158,9 +158,14 @@ func run(ctx context.Context, addr, dbPath string, snapshotEvery int64, demo dem
 	//    start from the latest snapshot instead of replaying from scratch.
 	//    Snapshots are stored as events in a parallel "boardsnapshot" stream
 	//    in the same SQLite database — no separate snapshot storage needed.
+	snapStore, err := streamsnapshots.New(eventStore)
+	if err != nil {
+		return fmt.Errorf("creating snapshot store: %w", err)
+	}
+
 	snapshotting, err := aggregatestore.NewSnapshottingStore(
 		eventSourced,
-		streamsnapshots.New(eventStore),
+		snapStore,
 		snapshotstore.EventCountSnapshotPolicy{N: snapshotEvery},
 	)
 	if err != nil {

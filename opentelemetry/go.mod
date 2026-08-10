@@ -3,8 +3,8 @@ module github.com/go-estoria/estoria-examples/telemetry
 go 1.26.2
 
 require (
-	github.com/go-estoria/estoria v0.7.0
-	github.com/go-estoria/estoria-contrib v0.7.0
+	github.com/go-estoria/estoria v0.8.0
+	github.com/go-estoria/estoria-contrib v0.8.0
 	github.com/gofrs/uuid/v5 v5.4.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.33.0
