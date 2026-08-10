@@ -14,6 +14,11 @@ import (
 
 // Event-sourced domains are easy to test: given an order, apply an event,
 // assert on the resulting state. No storage, no mocks.
+//
+// ApplyTo is total — a persisted event is a fact, and applying one cannot
+// fail — so these tests cover the state each event produces. The fulfillment
+// state machine (which events are legal in which status) is enforced by the
+// command handlers in server.go before any event is appended.
 
 var testItems = []LineItem{
 	{SKU: "TEE-001", Name: "Estoria Tee", Qty: 2, PriceCents: 2499},
@@ -27,7 +32,7 @@ func orderAt(t *testing.T, status Status) Order {
 
 	steps := []struct {
 		status Status
-		event  estoria.EntityEvent[Order]
+		event  estoria.DomainEvent[Order]
 	}{
 		{StatusPlaced, OrderPlaced{Customer: "Ada Lovelace", Items: testItems}},
 		{StatusPaid, OrderPaid{Method: "visa"}},
@@ -38,10 +43,7 @@ func orderAt(t *testing.T, status Status) Order {
 
 	order := NewOrder(uuid.Must(uuid.NewV4()))
 	for _, step := range steps {
-		var err error
-		if order, err = step.event.ApplyTo(context.Background(), order); err != nil {
-			t.Fatalf("applying %T: %v", step.event, err)
-		}
+		order = step.event.ApplyTo(order)
 		if step.status == status {
 			return order
 		}
@@ -75,73 +77,10 @@ func TestEventApplication(t *testing.T) {
 	t.Run("cancels before shipping", func(t *testing.T) {
 		t.Parallel()
 		for _, status := range []Status{StatusPlaced, StatusPaid, StatusPicked} {
-			order, err := OrderCancelled{Reason: "changed my mind"}.ApplyTo(context.Background(), orderAt(t, status))
-			if err != nil {
-				t.Errorf("cancelling a %s order: %v", status, err)
-				continue
-			}
+			order := OrderCancelled{Reason: "changed my mind"}.ApplyTo(orderAt(t, status))
 			if order.Status != StatusCancelled {
 				t.Errorf("status after cancelling a %s order = %q, want %q", status, order.Status, StatusCancelled)
 			}
-		}
-	})
-
-	t.Run("rejects invalid transitions", func(t *testing.T) {
-		t.Parallel()
-
-		// every event that is NOT the single legal next step for each status
-		invalid := map[Status][]estoria.EntityEvent[Order]{
-			StatusPlaced:    {OrderPlaced{Customer: "x", Items: testItems}, OrderPicked{}, OrderShipped{}, OrderDelivered{}},
-			StatusPaid:      {OrderPlaced{Customer: "x", Items: testItems}, OrderPaid{}, OrderShipped{}, OrderDelivered{}},
-			StatusPicked:    {OrderPlaced{Customer: "x", Items: testItems}, OrderPaid{}, OrderPicked{}, OrderDelivered{}},
-			StatusShipped:   {OrderPlaced{Customer: "x", Items: testItems}, OrderPaid{}, OrderPicked{}, OrderShipped{}, OrderCancelled{}},
-			StatusDelivered: {OrderPlaced{Customer: "x", Items: testItems}, OrderPaid{}, OrderPicked{}, OrderShipped{}, OrderDelivered{}, OrderCancelled{}},
-		}
-
-		for status, events := range invalid {
-			base := orderAt(t, status)
-			for _, event := range events {
-				if _, err := event.ApplyTo(context.Background(), base); err == nil {
-					t.Errorf("%T applied to a %s order: expected an error", event, status)
-				}
-			}
-		}
-	})
-
-	t.Run("rejects everything after cancellation", func(t *testing.T) {
-		t.Parallel()
-
-		cancelled, err := OrderCancelled{Reason: "test"}.ApplyTo(context.Background(), orderAt(t, StatusPlaced))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		for _, event := range orderEventPrototypes() {
-			if _, err := event.ApplyTo(context.Background(), cancelled); err == nil {
-				t.Errorf("%T applied to a cancelled order: expected an error", event)
-			}
-		}
-	})
-
-	t.Run("rejects commands on an unplaced order", func(t *testing.T) {
-		t.Parallel()
-
-		empty := NewOrder(uuid.Must(uuid.NewV4()))
-		for _, event := range []estoria.EntityEvent[Order]{
-			OrderPaid{}, OrderPicked{}, OrderShipped{}, OrderDelivered{}, OrderCancelled{},
-		} {
-			if _, err := event.ApplyTo(context.Background(), empty); err == nil {
-				t.Errorf("%T applied to an unplaced order: expected an error", event)
-			}
-		}
-	})
-
-	t.Run("rejects an order with no items", func(t *testing.T) {
-		t.Parallel()
-
-		empty := NewOrder(uuid.Must(uuid.NewV4()))
-		if _, err := (OrderPlaced{Customer: "Ada"}).ApplyTo(context.Background(), empty); err == nil {
-			t.Error("expected an error placing an order with no items")
 		}
 	})
 
@@ -151,9 +90,7 @@ func TestEventApplication(t *testing.T) {
 		before := orderAt(t, StatusPlaced)
 		itemsBefore := len(before.Items)
 
-		if _, err := (OrderPaid{Method: "visa"}).ApplyTo(context.Background(), before); err != nil {
-			t.Fatal(err)
-		}
+		OrderPaid{Method: "visa"}.ApplyTo(before)
 
 		if before.Status != StatusPlaced || len(before.Items) != itemsBefore {
 			t.Errorf("input order was mutated: %+v", before)
@@ -173,7 +110,7 @@ func TestOrderRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := aggregatestore.New(eventStore, NewOrder,
+	store, err := aggregatestore.New(eventStore, "order", NewOrder,
 		aggregatestore.WithEventTypes(orderEventPrototypes()...))
 	if err != nil {
 		t.Fatal(err)
@@ -182,12 +119,10 @@ func TestOrderRoundTrip(t *testing.T) {
 	orderID := uuid.Must(uuid.NewV7())
 
 	agg := store.New(orderID)
-	if err := agg.Append(
+	agg.Append(
 		OrderPlaced{Customer: "Grace Hopper", Items: testItems},
 		OrderPaid{Method: "amex"},
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
 	if err := store.Save(ctx, agg, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +135,7 @@ func TestOrderRoundTrip(t *testing.T) {
 	if v := loaded.Version(); v != 2 {
 		t.Fatalf("loaded version = %d, want 2", v)
 	}
-	if order := loaded.Entity(); order.Status != StatusPaid || order.Customer != "Grace Hopper" {
+	if order := loaded.State(); order.Status != StatusPaid || order.Customer != "Grace Hopper" {
 		t.Fatalf("loaded order = %+v, want Grace Hopper's order in status paid", order)
 	}
 
@@ -209,7 +144,7 @@ func TestOrderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if order := past.Entity(); order.Status != StatusPlaced {
+	if order := past.State(); order.Status != StatusPlaced {
 		t.Fatalf("order at v1 = %+v, want status placed", order)
 	}
 
@@ -223,16 +158,12 @@ func TestOrderRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := first.Append(OrderPicked{}); err != nil {
-		t.Fatal(err)
-	}
+	first.Append(OrderPicked{})
 	if err := store.Save(ctx, first, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := second.Append(OrderCancelled{Reason: "too slow"}); err != nil {
-		t.Fatal(err)
-	}
+	second.Append(OrderCancelled{Reason: "too slow"})
 	err = store.Save(ctx, second, nil)
 	if err == nil {
 		t.Fatal("expected a version conflict saving from a stale version")

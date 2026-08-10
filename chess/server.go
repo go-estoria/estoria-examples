@@ -85,7 +85,7 @@ type gameMessage struct {
 // newGameMessage assembles the standard game payload, including the move list
 // rendered in algebraic notation.
 func newGameMessage(agg *aggregatestore.Aggregate[Game], live bool) gameMessage {
-	game := agg.Entity()
+	game := agg.State()
 	san, err := sanHistory(game.MovesUCI)
 	if err != nil {
 		// the stream already applied cleanly, so this should be unreachable
@@ -142,7 +142,7 @@ func (s *server) handleListGames(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		game := agg.Entity()
+		game := agg.State()
 		summaries = append(summaries, gameSummary{
 			GameID:    game.ID.String(),
 			White:     game.White,
@@ -194,10 +194,7 @@ func (s *server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agg := s.live.New(gameID)
-	if err := agg.Append(GameCreated{White: white, Black: black}); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+	agg.Append(GameCreated{White: white, Black: black})
 	if err := s.live.Save(r.Context(), agg, nil); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -264,7 +261,7 @@ func (s *server) handleLegalMoves(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	game := agg.Entity()
+	game := agg.State()
 	moves := map[string][]legalTarget{}
 
 	if !game.Over() {
@@ -305,15 +302,15 @@ func hasTarget(targets []legalTarget, to string) bool {
 
 // A commandFunc validates a command against the game state it is based on
 // and returns the resulting event.
-type commandFunc func(game Game) (estoria.EntityEvent[Game], error)
+type commandFunc func(game Game) (gameEvent, error)
 
 // runCommand is the write path shared by all commands:
 //
 //  1. Load the game at the version the client last saw (baseVersion). When
 //     the stream has advanced past it, saving will fail the ExpectVersion
 //     check — real optimistic concurrency, not a simulated check.
-//  2. Derive the event and pre-flight it through its own ApplyTo against that
-//     state. Chess legality lives in ApplyTo, so an illegal move (or a move
+//  2. Derive the event and validate it against that state. Chess legality
+//     lives in the event's Validate method, so an illegal move (or a move
 //     after the game is over) is rejected here with a 422 — before anything
 //     is written to the stream.
 //  3. Append the event and save. On a version conflict, respond 409 so the
@@ -339,23 +336,20 @@ func (s *server) runCommand(w http.ResponseWriter, r *http.Request, gameID uuid.
 		return
 	}
 
-	event, err := cmd(agg.Entity())
+	event, err := cmd(agg.State())
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
-	// pre-flight: estoria applies events on save, after they are written, so
-	// an event the domain rejects must never reach the stream
-	if _, err := event.ApplyTo(ctx, agg.Entity()); err != nil {
+	// validate before appending: estoria applies events as facts, so an event
+	// the domain rejects must never reach the stream
+	if err := event.Validate(agg.State()); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
-	if err := agg.Append(event); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+	agg.Append(event)
 
 	if err := s.live.Save(ctx, agg, nil); err != nil {
 		var mismatch eventstore.StreamVersionMismatchError
@@ -393,7 +387,7 @@ func (s *server) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, gameID, req.BaseVersion, func(Game) (estoria.EntityEvent[Game], error) {
+	s.runCommand(w, r, gameID, req.BaseVersion, func(Game) (gameEvent, error) {
 		uci := strings.ToLower(strings.TrimSpace(req.UCI))
 		if uci == "" {
 			return nil, errors.New("uci move is required")
@@ -417,7 +411,7 @@ func (s *server) handleResign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runCommand(w, r, gameID, req.BaseVersion, func(Game) (estoria.EntityEvent[Game], error) {
+	s.runCommand(w, r, gameID, req.BaseVersion, func(Game) (gameEvent, error) {
 		return PlayerResigned{Color: strings.ToLower(strings.TrimSpace(req.Color))}, nil
 	})
 }
@@ -436,7 +430,7 @@ func (s *server) handlePGN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	game := agg.Entity()
+	game := agg.State()
 	engine, err := game.rebuild()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

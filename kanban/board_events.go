@@ -1,16 +1,16 @@
 package main
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/go-estoria/estoria"
 )
 
-// Each event below implements estoria.EntityEvent[Board]. The prototypes are
+// Each event below implements estoria.DomainEvent[Board]. The prototypes are
 // value-typed (New returns a value, not a pointer); estoria handles making
-// them addressable for unmarshaling. ApplyTo implementations are pure state
-// transitions: they clone the board, apply the change, and return the result.
+// them addressable for unmarshaling. ApplyTo implementations are pure, total
+// state transitions: they clone the board, apply the change, and return the
+// result. Commands are validated in the HTTP handlers before events are
+// appended (see server.go); an event that references a card or column that no
+// longer exists leaves the board unchanged.
 
 // BoardCreated initializes a board with a name.
 type BoardCreated struct {
@@ -18,11 +18,11 @@ type BoardCreated struct {
 }
 
 func (BoardCreated) EventType() string               { return "boardcreated" }
-func (BoardCreated) New() estoria.EntityEvent[Board] { return BoardCreated{} }
-func (e BoardCreated) ApplyTo(_ context.Context, b Board) (Board, error) {
+func (BoardCreated) New() estoria.DomainEvent[Board] { return BoardCreated{} }
+func (e BoardCreated) ApplyTo(b Board) Board {
 	next := b.clone()
 	next.Name = e.Name
-	return next, nil
+	return next
 }
 
 // BoardRenamed changes the board's name.
@@ -31,11 +31,11 @@ type BoardRenamed struct {
 }
 
 func (BoardRenamed) EventType() string               { return "boardrenamed" }
-func (BoardRenamed) New() estoria.EntityEvent[Board] { return BoardRenamed{} }
-func (e BoardRenamed) ApplyTo(_ context.Context, b Board) (Board, error) {
+func (BoardRenamed) New() estoria.DomainEvent[Board] { return BoardRenamed{} }
+func (e BoardRenamed) ApplyTo(b Board) Board {
 	next := b.clone()
 	next.Name = e.Name
-	return next, nil
+	return next
 }
 
 // ColumnAdded appends a new empty column to the board.
@@ -45,15 +45,11 @@ type ColumnAdded struct {
 }
 
 func (ColumnAdded) EventType() string               { return "columnadded" }
-func (ColumnAdded) New() estoria.EntityEvent[Board] { return ColumnAdded{} }
-func (e ColumnAdded) ApplyTo(_ context.Context, b Board) (Board, error) {
-	if b.HasColumn(e.ColumnID) {
-		return b, fmt.Errorf("column %s already exists", e.ColumnID)
-	}
-
+func (ColumnAdded) New() estoria.DomainEvent[Board] { return ColumnAdded{} }
+func (e ColumnAdded) ApplyTo(b Board) Board {
 	next := b.clone()
 	next.Columns = append(next.Columns, Column{ID: e.ColumnID, Title: e.Title, Cards: []Card{}})
-	return next, nil
+	return next
 }
 
 // ColumnRenamed changes a column's title.
@@ -63,16 +59,16 @@ type ColumnRenamed struct {
 }
 
 func (ColumnRenamed) EventType() string               { return "columnrenamed" }
-func (ColumnRenamed) New() estoria.EntityEvent[Board] { return ColumnRenamed{} }
-func (e ColumnRenamed) ApplyTo(_ context.Context, b Board) (Board, error) {
+func (ColumnRenamed) New() estoria.DomainEvent[Board] { return ColumnRenamed{} }
+func (e ColumnRenamed) ApplyTo(b Board) Board {
 	next := b.clone()
 	col := next.column(e.ColumnID)
 	if col == nil {
-		return b, fmt.Errorf("column %s does not exist", e.ColumnID)
+		return b
 	}
 
 	col.Title = e.Title
-	return next, nil
+	return next
 }
 
 // CardAdded places a new card at the end of a column.
@@ -85,16 +81,12 @@ type CardAdded struct {
 }
 
 func (CardAdded) EventType() string               { return "cardadded" }
-func (CardAdded) New() estoria.EntityEvent[Board] { return CardAdded{} }
-func (e CardAdded) ApplyTo(_ context.Context, b Board) (Board, error) {
-	if b.HasCard(e.CardID) {
-		return b, fmt.Errorf("card %s already exists", e.CardID)
-	}
-
+func (CardAdded) New() estoria.DomainEvent[Board] { return CardAdded{} }
+func (e CardAdded) ApplyTo(b Board) Board {
 	next := b.clone()
 	col := next.column(e.ColumnID)
 	if col == nil {
-		return b, fmt.Errorf("column %s does not exist", e.ColumnID)
+		return b
 	}
 
 	col.Cards = append(col.Cards, Card{
@@ -103,7 +95,7 @@ func (e CardAdded) ApplyTo(_ context.Context, b Board) (Board, error) {
 		Description: e.Description,
 		Color:       e.Color,
 	})
-	return next, nil
+	return next
 }
 
 // CardEdited replaces a card's title, description, and color.
@@ -115,19 +107,19 @@ type CardEdited struct {
 }
 
 func (CardEdited) EventType() string               { return "cardedited" }
-func (CardEdited) New() estoria.EntityEvent[Board] { return CardEdited{} }
-func (e CardEdited) ApplyTo(_ context.Context, b Board) (Board, error) {
+func (CardEdited) New() estoria.DomainEvent[Board] { return CardEdited{} }
+func (e CardEdited) ApplyTo(b Board) Board {
 	next := b.clone()
 	colIdx, cardIdx := next.findCard(e.CardID)
 	if colIdx < 0 {
-		return b, fmt.Errorf("card %s does not exist", e.CardID)
+		return b
 	}
 
 	card := &next.Columns[colIdx].Cards[cardIdx]
 	card.Title = e.Title
 	card.Description = e.Description
 	card.Color = e.Color
-	return next, nil
+	return next
 }
 
 // CardMoved relocates a card to a position within a column (possibly the same one).
@@ -138,18 +130,18 @@ type CardMoved struct {
 }
 
 func (CardMoved) EventType() string               { return "cardmoved" }
-func (CardMoved) New() estoria.EntityEvent[Board] { return CardMoved{} }
-func (e CardMoved) ApplyTo(_ context.Context, b Board) (Board, error) {
+func (CardMoved) New() estoria.DomainEvent[Board] { return CardMoved{} }
+func (e CardMoved) ApplyTo(b Board) Board {
 	next := b.clone()
 
 	colIdx, cardIdx := next.findCard(e.CardID)
 	if colIdx < 0 {
-		return b, fmt.Errorf("card %s does not exist", e.CardID)
+		return b
 	}
 
 	dest := next.column(e.ToColumn)
 	if dest == nil {
-		return b, fmt.Errorf("column %s does not exist", e.ToColumn)
+		return b
 	}
 
 	src := &next.Columns[colIdx]
@@ -158,7 +150,7 @@ func (e CardMoved) ApplyTo(_ context.Context, b Board) (Board, error) {
 
 	idx := min(max(e.ToIndex, 0), len(dest.Cards))
 	dest.Cards = append(dest.Cards[:idx], append([]Card{card}, dest.Cards[idx:]...)...)
-	return next, nil
+	return next
 }
 
 // CardRemoved deletes a card from the board.
@@ -167,23 +159,23 @@ type CardRemoved struct {
 }
 
 func (CardRemoved) EventType() string               { return "cardremoved" }
-func (CardRemoved) New() estoria.EntityEvent[Board] { return CardRemoved{} }
-func (e CardRemoved) ApplyTo(_ context.Context, b Board) (Board, error) {
+func (CardRemoved) New() estoria.DomainEvent[Board] { return CardRemoved{} }
+func (e CardRemoved) ApplyTo(b Board) Board {
 	next := b.clone()
 	colIdx, cardIdx := next.findCard(e.CardID)
 	if colIdx < 0 {
-		return b, fmt.Errorf("card %s does not exist", e.CardID)
+		return b
 	}
 
 	col := &next.Columns[colIdx]
 	col.Cards = append(col.Cards[:cardIdx], col.Cards[cardIdx+1:]...)
-	return next, nil
+	return next
 }
 
 // boardEventPrototypes lists every event type for registration with the
 // aggregate store and for decoding raw stream events in the activity feed.
-func boardEventPrototypes() []estoria.EntityEvent[Board] {
-	return []estoria.EntityEvent[Board]{
+func boardEventPrototypes() []estoria.DomainEvent[Board] {
+	return []estoria.DomainEvent[Board]{
 		BoardCreated{},
 		BoardRenamed{},
 		ColumnAdded{},

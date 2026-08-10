@@ -64,7 +64,7 @@ func main() {
 
 	// create an event-sourced aggregate store to load and save aggregates using the event store
 	var aggregateStore aggregatestore.Store[Account]
-	aggregateStore, err = aggregatestore.New(eventStore, NewAccount, aggregatestore.WithEventTypes(
+	aggregateStore, err = aggregatestore.New(eventStore, "account", NewAccount, aggregatestore.WithEventTypes(
 		AccountCreatedEvent{},
 		AccountDeletedEvent{},
 		UserAddedEvent{},
@@ -110,12 +110,12 @@ func main() {
 
 	// create an aggregate from a new entity, append some events, and save it
 	accountID := uuid.Must(uuid.NewV4())
-	aggregate := aggregatestore.NewAggregate(NewAccount(accountID), 0)
+	aggregate := aggregateStore.New(accountID)
 
-	fmt.Println("created new account:", aggregate.Entity())
+	fmt.Println("created new account:", aggregate.State())
 
 	// append some events to the aggregate
-	if err := aggregate.Append(
+	aggregate.Append(
 		AccountCreatedEvent{Username: "Leonardo"},
 		BalanceChangedEvent{Amount: +1000, ChangedAt: time.Now().UTC()},
 		UserAddedEvent{Username: "Michalangelo"},
@@ -124,22 +124,20 @@ func main() {
 		UserAddedEvent{Username: "Raphael"},
 		UserRemovedEvent{Username: "Michalangelo"},
 		BalanceChangedEvent{Amount: -708, ChangedAt: time.Now().UTC()},
-	); err != nil {
-		panic(err)
-	}
+	)
 
 	// save the aggregate
 	if err := aggregateStore.Save(ctx, aggregate, nil); err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("saved account:\n  %s\n", aggregate.Entity())
+	fmt.Printf("saved account:\n  %s\n", aggregate.State())
 
 	// load the aggregate
 	loadedAggregate, err := aggregateStore.Load(ctx, accountID, nil)
 	check(err)
 
-	fmt.Printf("loaded account:\n  %s\n", loadedAggregate.Entity())
+	fmt.Printf("loaded account:\n  %s\n", loadedAggregate.State())
 
 	//
 	// the below demonstrates some lower-level event store operations
@@ -157,7 +155,7 @@ func main() {
 	fmt.Println()
 	fmt.Printf("events in stream %s:\n", aggregate.ID())
 	_, err = proj.Project(ctx, projection.EventHandlerFunc(func(_ context.Context, evt *eventstore.Event) error {
-		fmt.Printf("  %s @%d %s %s\n", evt.StreamID.ShortString(), evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.Type)
+		fmt.Printf("  %s @%d %s %s\n", evt.StreamID.String(), evt.StreamVersion, evt.Timestamp.Format(time.DateTime), evt.ID.Type)
 		return nil
 	}))
 	check(err)

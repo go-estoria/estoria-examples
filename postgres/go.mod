@@ -1,10 +1,18 @@
 module github.com/go-estoria/estoria-examples/postgres
 
-go 1.26.1
+go 1.26.2
 
 require (
-	github.com/go-estoria/estoria v0.3.0
-	github.com/go-estoria/estoria-contrib v0.1.0
-	github.com/gofrs/uuid/v5 v5.3.2
-	github.com/lib/pq v1.10.9
+	github.com/go-estoria/estoria v0.7.0
+	github.com/go-estoria/estoria-contrib v0.7.0
+	github.com/gofrs/uuid/v5 v5.4.0
+	github.com/jackc/pgx/v5 v5.10.0
+)
+
+require (
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 )

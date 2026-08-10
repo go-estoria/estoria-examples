@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
 )
 
@@ -28,14 +27,9 @@ type Card struct {
 	Color       string `json:"color,omitempty"`
 }
 
-// NewBoard is the estoria.EntityFactory for Board aggregates.
+// NewBoard is the estoria.StateFactory for Board aggregates.
 func NewBoard(id uuid.UUID) Board {
 	return Board{ID: id}
-}
-
-// EntityID implements estoria.Entity.
-func (b Board) EntityID() typeid.ID {
-	return typeid.New("board", b.ID)
 }
 
 // clone returns a deep copy of the board so that ApplyTo implementations can

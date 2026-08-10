@@ -5,7 +5,8 @@
 // delivered, with cancellation allowed any time before shipping). The app
 // demonstrates, end to end:
 //
-//   - aggregate modeling with pure ApplyTo state-machine transitions
+//   - aggregate modeling with pure ApplyTo transitions, the fulfillment
+//     state machine validated in command handlers before events are appended
 //   - the Postgres event store with the transactional outbox: events and
 //     outbox rows commit in ONE transaction, so deliveries are never lost
 //     and never phantom
@@ -165,7 +166,7 @@ func run(ctx context.Context, addr, dsn string, demo demoConfig) error {
 
 		d := delivery{
 			EventType:     item.EventID.Type,
-			OrderID:       item.StreamID.ShortString(),
+			OrderID:       item.StreamID.String(),
 			StreamVersion: item.StreamVersion,
 			DeliveredAt:   time.Now().UTC(),
 		}
@@ -198,8 +199,9 @@ func run(ctx context.Context, addr, dsn string, demo demoConfig) error {
 	// from scratch is already optimal. (See the kanban example for snapshots.)
 
 	// 1. EventSourcedStore: hydrates by replaying events, saves with
-	//    optimistic concurrency (ExpectVersion).
-	eventSourced, err := aggregatestore.New(eventStore, NewOrder,
+	//    optimistic concurrency (ExpectVersion). The aggregate type name
+	//    becomes part of every aggregate's stream address.
+	eventSourced, err := aggregatestore.New(eventStore, "order", NewOrder,
 		aggregatestore.WithEventTypes(orderEventPrototypes()...))
 	if err != nil {
 		return fmt.Errorf("creating aggregate store: %w", err)
@@ -208,13 +210,13 @@ func run(ctx context.Context, addr, dsn string, demo demoConfig) error {
 	// 2. HookableStore: the AfterSave hook tells SSE clients a command was
 	//    accepted — the write side of the CQRS split. The read model catches
 	//    up moments later via the outbox (the "delivery" broadcasts above).
-	hookable, err := aggregatestore.NewHookableStore[Order](eventSourced)
+	hookable, err := aggregatestore.NewHookableStore(eventSourced)
 	if err != nil {
 		return fmt.Errorf("creating hookable store: %w", err)
 	}
 
 	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Order]) error {
-		broadcasts.broadcast(orderMessage{Type: "order", Version: agg.Version(), Order: agg.Entity()})
+		broadcasts.broadcast(orderMessage{Type: "order", Version: agg.Version(), Order: agg.State()})
 		return nil
 	})
 

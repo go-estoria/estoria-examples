@@ -48,13 +48,13 @@ func newTestServer(t *testing.T) *server {
 		t.Fatal(err)
 	}
 
-	eventSourced, err := aggregatestore.New(eventStore, NewGame,
+	eventSourced, err := aggregatestore.New(eventStore, "game", NewGame,
 		aggregatestore.WithEventTypes(gameEventPrototypes()...))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	hookable, err := aggregatestore.NewHookableStore[Game](eventSourced)
+	hookable, err := aggregatestore.NewHookableStore(eventSourced)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,12 +78,10 @@ func TestResetDemo(t *testing.T) {
 
 	gameID := uuid.Must(uuid.NewV7())
 	agg := srv.live.New(gameID)
-	if err := agg.Append(
+	agg.Append(
 		GameCreated{White: "Alice", Black: "Bob"},
 		MoveMade{UCI: "e2e4"},
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
 	if err := srv.live.Save(ctx, agg, nil); err != nil {
 		t.Fatal(err)
 	}

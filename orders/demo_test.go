@@ -76,7 +76,7 @@ func TestResetDemo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orders, err := aggregatestore.New(eventStore, NewOrder,
+	orders, err := aggregatestore.New(eventStore, "order", NewOrder,
 		aggregatestore.WithEventTypes(orderEventPrototypes()...))
 	if err != nil {
 		t.Fatal(err)
@@ -101,9 +101,7 @@ func TestResetDemo(t *testing.T) {
 	go func() { _ = ob.Run(runCtx) }()
 
 	agg := orders.New(uuid.Must(uuid.NewV7()))
-	if err := agg.Append(OrderPlaced{Customer: "Reset Test", Items: testItems}); err != nil {
-		t.Fatal(err)
-	}
+	agg.Append(OrderPlaced{Customer: "Reset Test", Items: testItems})
 	if err := orders.Save(ctx, agg, nil); err != nil {
 		t.Fatal(err)
 	}

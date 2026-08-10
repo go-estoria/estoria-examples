@@ -37,8 +37,6 @@ import (
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/snapshotstore"
 	streamsnapshots "github.com/go-estoria/estoria/snapshotstore/eventstream"
-	"github.com/go-estoria/estoria/typeid"
-	"github.com/gofrs/uuid/v5"
 	_ "modernc.org/sqlite"
 )
 
@@ -106,7 +104,7 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 	//    optimistic concurrency (ExpectVersion). Kept un-decorated as the
 	//    benchmark's "cold replay" path — the honest baseline that replays a
 	//    device's entire stream from version 1.
-	eventSourced, err := aggregatestore.New(eventStore, NewDevice,
+	eventSourced, err := aggregatestore.New(eventStore, "device", NewDevice,
 		aggregatestore.WithEventTypes(deviceEventPrototypes()...))
 	if err != nil {
 		return fmt.Errorf("creating aggregate store: %w", err)
@@ -118,8 +116,8 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 	//    in the same SQLite database — no separate snapshot storage needed.
 	//    This layer is also the benchmark's "snapshot" path (snapshotting
 	//    without caching).
-	snapStore := streamsnapshots.NewEventStreamStore(eventStore)
-	snapshotting, err := aggregatestore.NewSnapshottingStore[Device](
+	snapStore := streamsnapshots.New(eventStore)
+	snapshotting, err := aggregatestore.NewSnapshottingStore(
 		eventSourced,
 		snapStore,
 		snapshotstore.EventCountSnapshotPolicy{N: snapshotEvery},
@@ -136,23 +134,21 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 	if err != nil {
 		return fmt.Errorf("creating cache: %w", err)
 	}
-	cached, err := aggregatestore.NewCachedStore[Device](snapshotting, deviceCache{
-		inner: aggregatecache.New[Device](cacheBackend),
-	})
+	cached, err := aggregatestore.NewCachedStore(snapshotting, aggregatecache.New[Device](cacheBackend))
 	if err != nil {
 		return fmt.Errorf("creating cached store: %w", err)
 	}
 
 	// 4. HookableStore: lifecycle hooks. The AfterSave hook is what makes the
 	//    dashboard live: every saved change is pushed to all SSE clients.
-	hookable, err := aggregatestore.NewHookableStore[Device](cached)
+	hookable, err := aggregatestore.NewHookableStore(cached)
 	if err != nil {
 		return fmt.Errorf("creating hookable store: %w", err)
 	}
 
 	broadcasts := newHub()
 	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Device]) error {
-		broadcasts.broadcast(deviceMessage{Version: agg.Version(), Device: agg.Entity()})
+		broadcasts.broadcast(deviceMessage{Version: agg.Version(), Device: agg.State()})
 		return nil
 	})
 
@@ -225,20 +221,4 @@ func cacheConfig() bigcache.Config {
 	config.Shards = 64
 	config.Verbose = false
 	return config
-}
-
-// deviceCache adapts the estoria-contrib bigcache aggregate cache (which keys
-// by typeid.ID) to estoria's AggregateCache interface (which keys by
-// uuid.UUID). PutAggregate stores under the aggregate's typeid, so Get must
-// reconstruct the same "device_<uuid>" key.
-type deviceCache struct {
-	inner *aggregatecache.Cache[Device]
-}
-
-func (c deviceCache) GetAggregate(ctx context.Context, id uuid.UUID) (*aggregatestore.Aggregate[Device], error) {
-	return c.inner.GetAggregate(ctx, typeid.New("device", id))
-}
-
-func (c deviceCache) PutAggregate(ctx context.Context, agg *aggregatestore.Aggregate[Device]) error {
-	return c.inner.PutAggregate(ctx, agg)
 }

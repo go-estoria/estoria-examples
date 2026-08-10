@@ -1,13 +1,12 @@
 package main
 
 import (
-	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
 )
 
 // Status is an order's position in the fulfillment pipeline. Transitions are
-// enforced by the events in order_events.go; the entity never sets its own
-// status directly.
+// validated by the command handlers in server.go before events are appended;
+// the entity never sets its own status directly.
 type Status string
 
 const (
@@ -38,14 +37,9 @@ type LineItem struct {
 	PriceCents int64  `json:"priceCents"`
 }
 
-// NewOrder is the estoria.EntityFactory for Order aggregates.
+// NewOrder is the estoria.StateFactory for Order aggregates.
 func NewOrder(id uuid.UUID) Order {
 	return Order{ID: id}
-}
-
-// EntityID implements estoria.Entity.
-func (o Order) EntityID() typeid.ID {
-	return typeid.New("order", o.ID)
 }
 
 // clone returns a deep copy of the order so that ApplyTo implementations can

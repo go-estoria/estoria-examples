@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-estoria/estoria"
-	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
 )
 
@@ -21,9 +19,6 @@ type Account struct {
 	DeletedAt *time.Time
 }
 
-// All entities must implement the estoria.Entity interface.
-var _ estoria.Entity = Account{}
-
 // NewAccount creates a new Account entity with the given ID.
 // This factory function is used by Estoria when loading the
 // entity via the aggregate store.
@@ -35,11 +30,6 @@ func NewAccount(id uuid.UUID) Account {
 	}
 
 	return account
-}
-
-// EntityID returns the unique typed UUID for this entity.
-func (a Account) EntityID() typeid.ID {
-	return typeid.New("account", a.ID)
 }
 
 // String implements the fmt.Stringer interface for easy printing.

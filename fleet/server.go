@@ -46,7 +46,7 @@ type server struct {
 	events *sqlstore.EventStore
 
 	// snapshots reads each device's latest snapshot directly (for stats).
-	snapshots *streamsnapshots.EventStreamStore
+	snapshots *streamsnapshots.Store
 
 	// cache is the bigcache instance backing the CachedStore, held directly
 	// so the evict endpoint can delete entries out from under it.
@@ -122,7 +122,7 @@ func (s *server) handleFleet(w http.ResponseWriter, r *http.Request) {
 			s.writeLoadError(w, err)
 			return
 		}
-		fleet = append(fleet, deviceMessage{Version: agg.Version(), Device: agg.Entity()})
+		fleet = append(fleet, deviceMessage{Version: agg.Version(), Device: agg.State()})
 	}
 
 	sort.Slice(fleet, func(i, j int) bool { return fleet[i].Device.Name < fleet[j].Device.Name })
@@ -148,7 +148,7 @@ func (s *server) handleGetDevice(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, deviceMessage{
 		Version:         agg.Version(),
-		Device:          agg.Entity(),
+		Device:          agg.State(),
 		SnapshotVersion: s.snapshotVersion(r, id),
 	})
 }
@@ -348,7 +348,7 @@ func (s *server) handleWatch(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		msg, _ := json.Marshal(deviceMessage{Version: agg.Version(), Device: agg.Entity()})
+		msg, _ := json.Marshal(deviceMessage{Version: agg.Version(), Device: agg.State()})
 		fmt.Fprintf(w, "data: %s\n\n", msg)
 	}
 	if err := rc.Flush(); err != nil {

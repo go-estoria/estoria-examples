@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-estoria/estoria"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore/memory"
 	"github.com/go-estoria/estoria/snapshotstore"
@@ -33,15 +32,10 @@ func reading(i int, temp, humidity float64) ReadingRecorded {
 	}
 }
 
-func registered(t *testing.T) Device {
-	t.Helper()
-	device, err := DeviceRegistered{
+func registered() Device {
+	return DeviceRegistered{
 		Name: "greenhouse-01", Model: "AT-100", Location: "building A", Firmware: "1.0.0",
-	}.ApplyTo(context.Background(), NewDevice(uuid.Must(uuid.NewV4())))
-	if err != nil {
-		t.Fatalf("registering device: %v", err)
-	}
-	return device
+	}.ApplyTo(NewDevice(uuid.Must(uuid.NewV4())))
 }
 
 func TestEventApplication(t *testing.T) {
@@ -49,7 +43,7 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("registration brings the device online with a full battery", func(t *testing.T) {
 		t.Parallel()
-		device := registered(t)
+		device := registered()
 		if device.Status != "online" || device.BatteryPct != 100 || device.Name != "greenhouse-01" {
 			t.Errorf("device = %+v, want online at 100%% battery", device)
 		}
@@ -57,12 +51,9 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("readings accumulate and track min/max", func(t *testing.T) {
 		t.Parallel()
-		device := registered(t)
-		var err error
+		device := registered()
 		for i, temp := range []float64{22.0, 19.5, 27.5} {
-			if device, err = reading(i, temp, 50).ApplyTo(context.Background(), device); err != nil {
-				t.Fatal(err)
-			}
+			device = reading(i, temp, 50).ApplyTo(device)
 		}
 
 		if device.ReadingCount != 3 || len(device.Readings) != 3 {
@@ -78,12 +69,9 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("the reading ring buffer trims to the newest 60", func(t *testing.T) {
 		t.Parallel()
-		device := registered(t)
-		var err error
+		device := registered()
 		for i := 0; i < maxReadings+5; i++ {
-			if device, err = reading(i, 20+float64(i)*0.1, 50).ApplyTo(context.Background(), device); err != nil {
-				t.Fatal(err)
-			}
+			device = reading(i, 20+float64(i)*0.1, 50).ApplyTo(device)
 		}
 
 		if len(device.Readings) != maxReadings {
@@ -102,60 +90,34 @@ func TestEventApplication(t *testing.T) {
 
 	t.Run("alerts raise and clear", func(t *testing.T) {
 		t.Parallel()
-		device := registered(t)
+		device := registered()
 
-		device, err := AlertRaised{Kind: "overheat", Message: "too hot"}.ApplyTo(context.Background(), device)
-		if err != nil {
-			t.Fatal(err)
-		}
+		device = AlertRaised{Kind: "overheat", Message: "too hot"}.ApplyTo(device)
 		if !device.HasAlert("overheat") || device.ActiveAlerts["overheat"] != "too hot" {
 			t.Fatalf("alerts = %+v, want an active overheat alert", device.ActiveAlerts)
 		}
 
-		device, err = AlertCleared{Kind: "overheat"}.ApplyTo(context.Background(), device)
-		if err != nil {
-			t.Fatal(err)
-		}
+		device = AlertCleared{Kind: "overheat"}.ApplyTo(device)
 		if device.HasAlert("overheat") {
 			t.Errorf("alerts = %+v, want the overheat alert cleared", device.ActiveAlerts)
 		}
 	})
 
-	t.Run("rejects invalid transitions", func(t *testing.T) {
+	t.Run("clearing an inactive alert leaves the state unchanged", func(t *testing.T) {
 		t.Parallel()
-		base := registered(t)
-		withAlert, err := AlertRaised{Kind: "overheat", Message: "x"}.ApplyTo(context.Background(), base)
-		if err != nil {
-			t.Fatal(err)
-		}
+		base := registered()
 
-		for name, tc := range map[string]struct {
-			device Device
-			event  estoria.EntityEvent[Device]
-		}{
-			"register twice":         {base, DeviceRegistered{Name: "again"}},
-			"unknown status":         {base, StatusChanged{Status: "sleeping"}},
-			"empty firmware version": {base, FirmwareUpdated{}},
-			"empty alert kind":       {base, AlertRaised{Message: "x"}},
-			"duplicate alert":        {withAlert, AlertRaised{Kind: "overheat", Message: "x"}},
-			"clear inactive alert":   {base, AlertCleared{Kind: "overheat"}},
-		} {
-			if _, err := tc.event.ApplyTo(context.Background(), tc.device); err == nil {
-				t.Errorf("%s: expected an error", name)
-			}
+		device := AlertCleared{Kind: "overheat"}.ApplyTo(base)
+		if !reflect.DeepEqual(device, base) {
+			t.Errorf("device = %+v, want it unchanged from %+v", device, base)
 		}
 	})
 
 	t.Run("does not mutate the input device", func(t *testing.T) {
 		t.Parallel()
-		input := registered(t)
-		var err error
-		if input, err = reading(0, 22, 50).ApplyTo(context.Background(), input); err != nil {
-			t.Fatal(err)
-		}
-		if input, err = (AlertRaised{Kind: "overheat", Message: "x"}).ApplyTo(context.Background(), input); err != nil {
-			t.Fatal(err)
-		}
+		input := registered()
+		input = reading(0, 22, 50).ApplyTo(input)
+		input = AlertRaised{Kind: "overheat", Message: "x"}.ApplyTo(input)
 
 		// serialize the input before and after applying more events to it;
 		// any shared-slice or shared-map mutation shows up as a difference
@@ -164,15 +126,9 @@ func TestEventApplication(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := reading(1, 31, 55).ApplyTo(context.Background(), input); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := (AlertCleared{Kind: "overheat"}).ApplyTo(context.Background(), input); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := (StatusChanged{Status: "offline"}).ApplyTo(context.Background(), input); err != nil {
-			t.Fatal(err)
-		}
+		_ = reading(1, 31, 55).ApplyTo(input)
+		_ = AlertCleared{Kind: "overheat"}.ApplyTo(input)
+		_ = StatusChanged{Status: "offline"}.ApplyTo(input)
 
 		after, err := json.Marshal(input)
 		if err != nil {
@@ -195,7 +151,7 @@ func TestDeviceRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := aggregatestore.New(eventStore, NewDevice,
+	store, err := aggregatestore.New(eventStore, "device", NewDevice,
 		aggregatestore.WithEventTypes(deviceEventPrototypes()...))
 	if err != nil {
 		t.Fatal(err)
@@ -204,14 +160,12 @@ func TestDeviceRoundTrip(t *testing.T) {
 	deviceID := uuid.Must(uuid.NewV7())
 
 	agg := store.New(deviceID)
-	if err := agg.Append(
+	agg.Append(
 		DeviceRegistered{Name: "rooftop-07", Model: "AT-200", Location: "annex", Firmware: "1.2.0"},
 		reading(0, 24.5, 48),
 		AlertRaised{Kind: "overheat", Message: "temperature 30.2°C exceeds 30°C"},
 		StatusChanged{Status: "offline"},
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
 	if err := store.Save(ctx, agg, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +178,7 @@ func TestDeviceRoundTrip(t *testing.T) {
 		t.Fatalf("loaded version = %d, want 4", v)
 	}
 
-	device := loaded.Entity()
+	device := loaded.State()
 	if device.Name != "rooftop-07" || device.Status != "offline" ||
 		device.ReadingCount != 1 || !device.HasAlert("overheat") {
 		t.Fatalf("loaded device = %+v, want the saved state back", device)
@@ -244,7 +198,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plain, err := aggregatestore.New(eventStore, NewDevice,
+	plain, err := aggregatestore.New(eventStore, "device", NewDevice,
 		aggregatestore.WithEventTypes(deviceEventPrototypes()...))
 	if err != nil {
 		t.Fatal(err)
@@ -252,9 +206,9 @@ func TestSnapshotRoundTrip(t *testing.T) {
 
 	// the event-stream snapshot store works over any event store, including
 	// the in-memory one used here
-	snapStore := streamsnapshots.NewEventStreamStore(eventStore)
+	snapStore := streamsnapshots.New(eventStore)
 	const snapshotEvery = 25
-	snapshotting, err := aggregatestore.NewSnapshottingStore[Device](
+	snapshotting, err := aggregatestore.NewSnapshottingStore(
 		plain, snapStore, snapshotstore.EventCountSnapshotPolicy{N: snapshotEvery})
 	if err != nil {
 		t.Fatal(err)
@@ -265,9 +219,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	// register, then save several batches of readings through the
 	// snapshotting store so the policy fires along the way
 	agg := snapshotting.New(deviceID)
-	if err := agg.Append(DeviceRegistered{Name: "coldroom-03", Model: "HygroNode", Location: "yard 3", Firmware: "1.4.0"}); err != nil {
-		t.Fatal(err)
-	}
+	agg.Append(DeviceRegistered{Name: "coldroom-03", Model: "HygroNode", Location: "yard 3", Firmware: "1.4.0"})
 	if err := snapshotting.Save(ctx, agg, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -280,9 +232,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		}
 		for i := 0; i < 8; i++ {
 			n := batch*8 + i
-			if err := agg.Append(reading(n, 20+float64(n%10), 40+float64(n%20))); err != nil {
-				t.Fatal(err)
-			}
+			agg.Append(reading(n, 20+float64(n%10), 40+float64(n%20)))
 		}
 		if err := snapshotting.Save(ctx, agg, nil); err != nil {
 			t.Fatal(err)
@@ -313,8 +263,8 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		t.Fatalf("versions = %d (snapshot) vs %d (replay), want both %d",
 			fromSnapshot.Version(), replayed.Version(), totalReadings+1)
 	}
-	if !reflect.DeepEqual(fromSnapshot.Entity(), replayed.Entity()) {
+	if !reflect.DeepEqual(fromSnapshot.State(), replayed.State()) {
 		t.Errorf("snapshot-hydrated entity differs from full replay:\n got %+v\nwant %+v",
-			fromSnapshot.Entity(), replayed.Entity())
+			fromSnapshot.State(), replayed.State())
 	}
 }

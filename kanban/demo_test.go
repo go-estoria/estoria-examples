@@ -48,22 +48,22 @@ func newTestServer(t *testing.T) *server {
 		t.Fatal(err)
 	}
 
-	eventSourced, err := aggregatestore.New(eventStore, NewBoard,
+	eventSourced, err := aggregatestore.New(eventStore, "board", NewBoard,
 		aggregatestore.WithEventTypes(boardEventPrototypes()...))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	snapshotting, err := aggregatestore.NewSnapshottingStore[Board](
+	snapshotting, err := aggregatestore.NewSnapshottingStore(
 		eventSourced,
-		streamsnapshots.NewEventStreamStore(eventStore),
+		streamsnapshots.New(eventStore),
 		snapshotstore.EventCountSnapshotPolicy{N: 10},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	hookable, err := aggregatestore.NewHookableStore[Board](snapshotting)
+	hookable, err := aggregatestore.NewHookableStore(snapshotting)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func newTestServer(t *testing.T) *server {
 	// would behave differently under test than in the app
 	broadcasts := newHub(0)
 	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Board]) error {
-		broadcasts.broadcast(boardMessage{Version: agg.Version(), Live: true, Board: agg.Entity()})
+		broadcasts.broadcast(boardMessage{Version: agg.Version(), Live: true, Board: agg.State()})
 		return nil
 	})
 
@@ -123,13 +123,11 @@ func TestResetDemo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := agg.Append(CardAdded{
+	agg.Append(CardAdded{
 		CardID:   "graffiti",
-		ColumnID: agg.Entity().Columns[0].ID,
+		ColumnID: agg.State().Columns[0].ID,
 		Title:    "someone wrote this",
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 	if err := srv.live.Save(ctx, agg, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +144,7 @@ func TestResetDemo(t *testing.T) {
 	if reset.Version() != seededVersion {
 		t.Errorf("version after reset = %d, want %d (the seeded version)", reset.Version(), seededVersion)
 	}
-	for _, column := range reset.Entity().Columns {
+	for _, column := range reset.State().Columns {
 		for _, card := range column.Cards {
 			if card.ID == "graffiti" {
 				t.Error("the card added after seeding survived the reset")

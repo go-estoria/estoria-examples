@@ -144,7 +144,7 @@ func run(ctx context.Context, addr, dbPath string, demo demoConfig) error {
 
 	// 1. EventSourcedStore: hydrates by replaying events, saves with
 	//    optimistic concurrency (ExpectVersion).
-	eventSourced, err := aggregatestore.New(eventStore, NewGame,
+	eventSourced, err := aggregatestore.New(eventStore, "game", NewGame,
 		aggregatestore.WithEventTypes(gameEventPrototypes()...))
 	if err != nil {
 		return fmt.Errorf("creating aggregate store: %w", err)
@@ -152,7 +152,7 @@ func run(ctx context.Context, addr, dbPath string, demo demoConfig) error {
 
 	// 2. HookableStore: lifecycle hooks. The AfterSave hook is what makes the
 	//    app multiplayer: every saved move is pushed to all SSE clients.
-	hookable, err := aggregatestore.NewHookableStore[Game](eventSourced)
+	hookable, err := aggregatestore.NewHookableStore(eventSourced)
 	if err != nil {
 		return fmt.Errorf("creating hookable store: %w", err)
 	}
