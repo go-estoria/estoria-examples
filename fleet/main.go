@@ -116,7 +116,11 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 	//    in the same SQLite database — no separate snapshot storage needed.
 	//    This layer is also the benchmark's "snapshot" path (snapshotting
 	//    without caching).
-	snapStore := streamsnapshots.New(eventStore)
+	snapStore, err := streamsnapshots.New(eventStore)
+	if err != nil {
+		return fmt.Errorf("creating snapshot store: %w", err)
+	}
+
 	snapshotting, err := aggregatestore.NewSnapshottingStore(
 		eventSourced,
 		snapStore,

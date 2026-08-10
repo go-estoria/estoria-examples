@@ -54,9 +54,14 @@ func newTestServer(t *testing.T) *server {
 		t.Fatal(err)
 	}
 
+	snapStore, err := streamsnapshots.New(eventStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	snapshotting, err := aggregatestore.NewSnapshottingStore(
 		eventSourced,
-		streamsnapshots.New(eventStore),
+		snapStore,
 		snapshotstore.EventCountSnapshotPolicy{N: 10},
 	)
 	if err != nil {

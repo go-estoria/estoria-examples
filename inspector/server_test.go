@@ -238,7 +238,7 @@ func seedTestStore(t *testing.T, dir string) string {
 
 	appendEvents := func(streamID typeid.ID, events ...*eventstore.WritableEvent) {
 		t.Helper()
-		if err := store.AppendStream(ctx, streamID, events, eventstore.AppendStreamOptions{}); err != nil {
+		if _, err := store.AppendStream(ctx, streamID, events, eventstore.AppendStreamOptions{}); err != nil {
 			t.Fatalf("appending to %s: %v", streamID, err)
 		}
 	}
