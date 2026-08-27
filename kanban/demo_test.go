@@ -68,22 +68,13 @@ func newTestServer(t *testing.T) *server {
 		t.Fatal(err)
 	}
 
-	hookable, err := aggregatestore.NewHookableStore(snapshotting)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// the same AfterSave broadcast main.go registers — without it the store
+	// the same broadcasting decorator main.go wires — without it the store
 	// would behave differently under test than in the app
 	broadcasts := newHub(0)
-	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Board]) error {
-		broadcasts.broadcast(boardMessage{Version: agg.Version(), Live: true, Board: agg.State()})
-		return nil
-	})
 
 	return &server{
 		boardID:       uuid.Must(uuid.NewV4()),
-		live:          hookable,
+		live:          broadcastingStore{Store: snapshotting, hub: broadcasts},
 		history:       eventSourced,
 		events:        eventStore,
 		db:            db,

@@ -207,18 +207,11 @@ func run(ctx context.Context, addr, dsn string, demo demoConfig) error {
 		return fmt.Errorf("creating aggregate store: %w", err)
 	}
 
-	// 2. HookableStore: the AfterSave hook tells SSE clients a command was
-	//    accepted — the write side of the CQRS split. The read model catches
-	//    up moments later via the outbox (the "delivery" broadcasts above).
-	hookable, err := aggregatestore.NewHookableStore(eventSourced)
-	if err != nil {
-		return fmt.Errorf("creating hookable store: %w", err)
-	}
-
-	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Order]) error {
-		broadcasts.broadcast(orderMessage{Type: "order", Version: agg.Version(), Order: agg.State()})
-		return nil
-	})
+	// 2. broadcastingStore: an app-local decorator that tells SSE clients a
+	//    command was accepted — the write side of the CQRS split. The read
+	//    model catches up moments later via the outbox (the "delivery"
+	//    broadcasts above).
+	orderStore := broadcastingStore{Store: eventSourced, hub: broadcasts}
 
 	// the outbox processor polls for undelivered items until shutdown
 	go func() {
@@ -228,7 +221,7 @@ func run(ctx context.Context, addr, dsn string, demo demoConfig) error {
 	}()
 
 	srv := &server{
-		orders:    hookable,
+		orders:    orderStore,
 		events:    eventStore,
 		readModel: rm,
 		pool:      pool,
@@ -265,6 +258,23 @@ func run(ctx context.Context, addr, dsn string, demo demoConfig) error {
 	if err := httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+
+	return nil
+}
+
+// broadcastingStore decorates an aggregate store, pushing every successfully
+// saved order to all SSE clients.
+type broadcastingStore struct {
+	aggregatestore.Store[Order]
+	hub *hub
+}
+
+func (s broadcastingStore) Save(ctx context.Context, aggregate *aggregatestore.Aggregate[Order], opts *aggregatestore.SaveOptions) error {
+	if err := s.Store.Save(ctx, aggregate, opts); err != nil {
+		return err
+	}
+
+	s.hub.broadcast(orderMessage{Type: "order", Version: aggregate.Version(), Order: aggregate.State()})
 
 	return nil
 }

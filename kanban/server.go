@@ -488,7 +488,7 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
 		Streams:       []streamInfo{},
 		SnapshotEvery: s.snapshotEvery,
 		StoreStack: []string{
-			"HookableStore (SSE broadcast on AfterSave)",
+			"broadcastingStore (app-local; SSE broadcast on save)",
 			"SnapshottingStore (snapshot every " + strconv.FormatInt(s.snapshotEvery, 10) + " events)",
 			"EventSourcedStore (optimistic concurrency)",
 			"SQLite event store",

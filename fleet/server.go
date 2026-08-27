@@ -278,7 +278,7 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
 		SimRunning:    s.sim.isRunning(),
 		SnapshotEvery: s.snapshotEvery,
 		StoreStack: []string{
-			"HookableStore (SSE broadcast on AfterSave)",
+			"broadcastingStore (app-local; SSE broadcast on save)",
 			"CachedStore (bigcache, in-process)",
 			"SnapshottingStore (snapshot every " + strconv.FormatInt(s.snapshotEvery, 10) + " events)",
 			"EventSourcedStore (optimistic concurrency)",
@@ -332,7 +332,8 @@ func (s *server) eventRate(total int64) float64 {
 }
 
 // handleWatch streams device updates to the client over server-sent events.
-// Each message is one device's post-save state, pushed by the AfterSave hook.
+// Each message is one device's post-save state, pushed by the broadcasting
+// decorator.
 func (s *server) handleWatch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")

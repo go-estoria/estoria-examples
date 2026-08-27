@@ -21,8 +21,8 @@ while you work.
 | Estoria feature | Where to see it |
 | --------------- | --------------- |
 | Aggregate modeling with pure `ApplyTo` transitions | [`board.go`](./board.go), [`board_events.go`](./board_events.go) |
-| The aggregate store decorator stack (`Store[E]` composition) | [`main.go`](./main.go) — `EventSourcedStore` → `SnapshottingStore` → `HookableStore` |
-| Lifecycle hooks (`AfterSave` powers the live sync) | [`main.go`](./main.go) — the hook broadcasts every saved change over SSE |
+| The aggregate store decorator stack (`Store[E]` composition) | [`main.go`](./main.go) — `EventSourcedStore` → `SnapshottingStore` → an app-local broadcasting decorator |
+| Writing your own store decorator (powers the live sync) | [`main.go`](./main.go) — `broadcastingStore` pushes every saved change over SSE |
 | Time travel with `LoadOptions.ToVersion` | `GET /api/board?version=N` in [`server.go`](./server.go); the timeline slider in the UI |
 | Optimistic concurrency (`ExpectVersion` → `StreamVersionMismatchError`) | `runCommand` in [`server.go`](./server.go) maps conflicts to HTTP 409; the ⚡ button triggers one on demand |
 | Snapshots with `EventCountSnapshotPolicy` | Every 10 events; the Under the Hood panel announces each one |
@@ -60,9 +60,9 @@ check standing in for the storage-level one.
 
 The server composes two aggregate stores over one event store:
 
-- **live** (`HookableStore` → `SnapshottingStore` → `EventSourcedStore`): serves
-  latest-state reads and all writes. Loads start from the most recent snapshot;
-  saves trigger the snapshot policy and the `AfterSave` broadcast hook.
+- **live** (`broadcastingStore` → `SnapshottingStore` → `EventSourcedStore`):
+  serves latest-state reads and all writes. Loads start from the most recent
+  snapshot; saves trigger the snapshot policy and the SSE broadcast.
 - **history** (`EventSourcedStore` only): serves version-pinned loads for the
   timeline slider. Time travel bypasses the snapshotting decorator because the
   event-stream snapshot store always returns the *latest* snapshot, which may be

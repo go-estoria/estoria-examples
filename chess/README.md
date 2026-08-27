@@ -23,7 +23,7 @@ move is pushed to all tabs over SSE the moment it is saved.
 | Aggregate modeling with pure `ApplyTo` transitions | [`game.go`](./game.go), [`game_events.go`](./game_events.go) |
 | Domain rules enforced in the events themselves | `MoveMade.ApplyTo` rejects illegal moves — chess legality lives in the domain, not in HTTP handlers |
 | One aggregate per game (many short streams, one store) | [`main.go`](./main.go); the lobby lists them via `ListStreams` |
-| Lifecycle hooks (`AfterSave` powers live play) | [`main.go`](./main.go) — the hook broadcasts every saved move over SSE |
+| Writing your own store decorator (powers live play) | [`main.go`](./main.go) — `broadcastingStore` pushes every saved move over SSE |
 | Time travel with `LoadOptions.ToVersion` | `GET /api/games/{id}?version=N` in [`server.go`](./server.go); the replay slider in the UI |
 | Optimistic concurrency (`ExpectVersion` → `StreamVersionMismatchError`) | `runCommand` in [`server.go`](./server.go) maps conflicts to HTTP 409 — turn-race protection for free |
 | Deriving artifacts from the stream (SAN move lists, PGN export) | `sanHistory` in [`game.go`](./game.go), `handlePGN` in [`server.go`](./server.go) |
@@ -77,8 +77,8 @@ Version 1 is the freshly created game; version k is the position after k−1
 moves. There is no snapshot store here, deliberately: games are short streams,
 replaying them is instant, and a snapshotting decorator must never be combined
 with version-pinned loads anyway (a snapshot always reflects the *latest* state,
-which may be newer than the version requested). Plain `EventSourcedStore` +
-`HookableStore` is the whole stack.
+which may be newer than the version requested). Plain `EventSourcedStore` plus
+a small app-local broadcasting decorator is the whole stack.
 
 ### The lobby is a fold over `ListStreams`
 

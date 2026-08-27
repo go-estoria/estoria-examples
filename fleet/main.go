@@ -7,11 +7,11 @@
 //
 //   - long, ever-growing streams (one per device, thousands of events)
 //   - the full aggregate store decorator stack:
-//     hooks -> cached (bigcache) -> snapshotting -> event-sourced
+//     broadcasting -> cached (bigcache) -> snapshotting -> event-sourced
 //   - snapshots as events in parallel streams (no extra infrastructure)
 //   - aggregate caching, so hot loads skip storage entirely
 //   - a live hydration benchmark: cold replay vs snapshot vs cache hit
-//   - live dashboard updates via an AfterSave hook broadcasting over SSE
+//   - live dashboard updates via an app-local save decorator broadcasting over SSE
 //
 // Run it with no arguments and open http://localhost:8083. No Docker required.
 package main
@@ -143,18 +143,10 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 		return fmt.Errorf("creating cached store: %w", err)
 	}
 
-	// 4. HookableStore: lifecycle hooks. The AfterSave hook is what makes the
-	//    dashboard live: every saved change is pushed to all SSE clients.
-	hookable, err := aggregatestore.NewHookableStore(cached)
-	if err != nil {
-		return fmt.Errorf("creating hookable store: %w", err)
-	}
-
+	// 4. broadcastingStore: an app-local decorator. Pushing every saved
+	//    change to all SSE clients is what makes the dashboard live.
 	broadcasts := newHub()
-	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Device]) error {
-		broadcasts.broadcast(deviceMessage{Version: agg.Version(), Device: agg.State()})
-		return nil
-	})
+	live := broadcastingStore{Store: cached, hub: broadcasts}
 
 	// The registry of device IDs is derived from the event store itself:
 	// every stream of type "device" is a device. Top up to the requested
@@ -170,7 +162,7 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 		}
 	}
 	if missing := devices - reg.count(); missing > 0 {
-		if err := registerDevices(ctx, hookable, reg, missing); err != nil {
+		if err := registerDevices(ctx, live, reg, missing); err != nil {
 			return fmt.Errorf("registering devices: %w", err)
 		}
 		estoria.GetLogger().Info("registered devices", "count", missing, "fleet_size", reg.count())
@@ -178,12 +170,12 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 
 	// the simulator is the fleet: one goroutine per device, writing through
 	// the full decorated stack
-	sim := newSimulator(ctx, hookable, reg)
+	sim := newSimulator(ctx, live, reg)
 	sim.start()
 	defer sim.stop()
 
 	srv := &server{
-		live:          hookable,
+		live:          live,
 		snapshotting:  snapshotting,
 		history:       eventSourced,
 		events:        eventStore,
@@ -225,4 +217,21 @@ func cacheConfig() bigcache.Config {
 	config.Shards = 64
 	config.Verbose = false
 	return config
+}
+
+// broadcastingStore decorates an aggregate store, pushing every successfully
+// saved device to all SSE clients.
+type broadcastingStore struct {
+	aggregatestore.Store[Device]
+	hub *hub
+}
+
+func (s broadcastingStore) Save(ctx context.Context, aggregate *aggregatestore.Aggregate[Device], opts *aggregatestore.SaveOptions) error {
+	if err := s.Store.Save(ctx, aggregate, opts); err != nil {
+		return err
+	}
+
+	s.hub.broadcast(deviceMessage{Version: aggregate.Version(), Device: aggregate.State()})
+
+	return nil
 }

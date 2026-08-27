@@ -7,9 +7,9 @@ import (
 	"github.com/go-estoria/estoria"
 )
 
-// A hub fans out board updates to connected SSE clients. It is fed by an
-// AfterSave hook on the aggregate store, so every successfully saved change
-// reaches every connected browser.
+// A hub fans out board updates to connected SSE clients. It is fed by the
+// broadcasting decorator on the aggregate store, so every successfully saved
+// change reaches every connected browser.
 type hub struct {
 	// maxClients caps concurrent subscribers. Each one holds an open request
 	// and a goroutine, so on a public demo it's worth bounding; 0 means no cap.
