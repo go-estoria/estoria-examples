@@ -1,0 +1,6 @@
+ledger
+go.work
+go.work.sum
+docker-compose.yml
+Makefile
+README.md

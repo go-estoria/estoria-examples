@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estoria Ledger</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏦</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="box">🏦</span><strong>estoria</strong>&nbsp;ledger</div>
+  <span id="live-pill" class="pill live-pill" title="The projection version currently serving reads, per the router">no live version</span>
+  <div class="spacer"></div>
+  <span id="conn-pill" class="pill">connecting&hellip;</span>
+  <button id="traffic-toggle" class="btn" title="A background generator appending deposits and withdrawals">▶ Start traffic</button>
+</header>
+
+<main id="layout">
+  <section class="rail" aria-label="lifecycle controls">
+
+    <div class="card" id="lifecycle-card">
+      <div class="card-head">
+        <h2>Rebuild lifecycle</h2>
+        <span id="phase-badge" class="badge">none</span>
+      </div>
+      <div id="attempt-info" class="kv"></div>
+      <div id="run-status" class="hidden"></div>
+
+      <div id="controls">
+        <form id="begin-form" class="stack hidden">
+          <input id="begin-reason" type="text" placeholder="why rebuild? (recorded durably)">
+          <button class="btn primary" type="submit">Start rebuild</button>
+        </form>
+
+        <form id="resume-form" class="stack hidden">
+          <div class="hint" id="resume-hint"></div>
+          <div id="takeover-fields" class="stack hidden">
+            <input id="takeover-actor" type="text" placeholder="takeover actor (e.g. your name)">
+            <input id="takeover-reason" type="text" placeholder="why the claimant is provably gone">
+          </div>
+          <button class="btn primary" type="submit" id="resume-btn">Resume build in this process</button>
+        </form>
+
+        <div id="attempt-actions" class="stack hidden">
+          <button class="btn primary hidden" id="promote-btn" title="Cut reads over to the freshly built version">⇧ Promote</button>
+          <button class="btn hidden" id="rollback-btn" title="Revert reads to the previous version">⇩ Roll back</button>
+          <button class="btn hidden" id="retire-btn" title="Destroy the previous version's storage, gated by the retirement policy">🗑 Retire previous</button>
+          <form id="abandon-form" class="row hidden">
+            <input id="abandon-cause" type="text" placeholder="cause">
+            <button class="btn danger" type="submit">✕ Abandon</button>
+          </form>
+          <form id="override-form" class="stack hidden">
+            <div class="hint">Retirement was refused. Override the witness gate (audited):</div>
+            <input id="override-actor" type="text" placeholder="override actor">
+            <input id="override-reason" type="text" placeholder="override reason">
+            <button class="btn danger" type="submit">Retire with override</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Retirement policy</h2>
+        <span id="policy-badge" class="badge"></span>
+      </div>
+      <div class="hint">Who must vouch that reads have converged before a previous version's table is destroyed.</div>
+      <form id="policy-form" class="stack">
+        <label class="check"><input type="radio" name="policy" value="router" checked> witnessed by <code>router</code></label>
+        <label class="check"><input type="radio" name="policy" value="unwitnessed"> explicitly unwitnessed</label>
+        <input id="policy-actor" type="text" placeholder="actor">
+        <input id="policy-reason" type="text" placeholder="reason">
+        <button class="btn" type="submit">Record policy</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>New account</h2></div>
+      <form id="account-form" class="stack">
+        <input id="account-holder" type="text" placeholder="holder name">
+        <input id="account-deposit" type="number" min="0" step="0.01" placeholder="opening deposit ($)">
+        <button class="btn" type="submit">Open account</button>
+      </form>
+    </div>
+
+  </section>
+
+  <section class="versions" id="versions" aria-label="projection versions"></section>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
