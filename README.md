@@ -25,6 +25,7 @@ Two are deployed and open to poke at, both reseeded at the top of every hour:
 | [Fleet](./fleet) | An IoT sensor-fleet dashboard with an in-process device simulator: long streams, the full snapshotting + caching decorator stack, and a live hydration benchmark. SQLite, no Docker. |
 | [Chess](./chess) ([demo](https://chess.demo.estoria.dev)) | Live two-player chess where each game is an event stream: move legality inside ApplyTo, a replay slider via ToVersion, optimistic concurrency as turn-race protection, and PGN export. SQLite, no Docker. |
 | [Inspector](./inspector) | A read-only web tool for browsing any supported event store: stream lists, event paging, payload inspection, and a live global-feed tail — built on the core reader interface plus optional per-backend capabilities. |
+| [Ledger](./ledger) | A bank ledger whose read model is rebuilt live, blue/green, from a web console: versioned projections built alongside the version still serving reads, promotion and rollback as recorded cutovers, witnessed retirement, and crash recovery with audited runner takeover. Postgres. |
 
 ## Backend quickstarts
 
