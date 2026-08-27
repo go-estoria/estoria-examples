@@ -8,7 +8,7 @@
 //   - aggregate modeling where the rules engine lives in pure ApplyTo
 //     transitions (an illegal move is an event the domain rejects)
 //   - one aggregate per game: many short streams in one event store
-//   - live play via an AfterSave hook broadcasting over SSE
+//   - live play via an app-local save decorator broadcasting over SSE
 //   - full game replay with LoadOptions.ToVersion
 //   - optimistic concurrency as turn-race protection, surfaced as HTTP 409s
 //   - deriving artifacts (SAN move lists, PGN exports) from the stream
@@ -150,21 +150,13 @@ func run(ctx context.Context, addr, dbPath string, demo demoConfig) error {
 		return fmt.Errorf("creating aggregate store: %w", err)
 	}
 
-	// 2. HookableStore: lifecycle hooks. The AfterSave hook is what makes the
-	//    app multiplayer: every saved move is pushed to all SSE clients.
-	hookable, err := aggregatestore.NewHookableStore(eventSourced)
-	if err != nil {
-		return fmt.Errorf("creating hookable store: %w", err)
-	}
-
+	// 2. broadcastingStore: an app-local decorator. Pushing every saved move
+	//    to all SSE clients is what makes the app multiplayer.
 	broadcasts := newHub(demo.maxClients)
-	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Game]) error {
-		broadcasts.broadcast(newGameMessage(agg, true))
-		return nil
-	})
+	live := broadcastingStore{Store: eventSourced, hub: broadcasts}
 
 	srv := &server{
-		live:    hookable,
+		live:    live,
 		history: eventSourced,
 		events:  eventStore,
 		db:      db,
@@ -200,6 +192,23 @@ func run(ctx context.Context, addr, dbPath string, demo demoConfig) error {
 	if err := httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+
+	return nil
+}
+
+// broadcastingStore decorates an aggregate store, pushing every successfully
+// saved game to all SSE clients.
+type broadcastingStore struct {
+	aggregatestore.Store[Game]
+	hub *hub
+}
+
+func (s broadcastingStore) Save(ctx context.Context, aggregate *aggregatestore.Aggregate[Game], opts *aggregatestore.SaveOptions) error {
+	if err := s.Store.Save(ctx, aggregate, opts); err != nil {
+		return err
+	}
+
+	s.hub.broadcast(newGameMessage(aggregate, true))
 
 	return nil
 }

@@ -7,9 +7,9 @@ import (
 	"github.com/go-estoria/estoria"
 )
 
-// A hub fans out device updates to connected SSE clients. It is fed by an
-// AfterSave hook on the aggregate store, so every successfully saved change —
-// human- or simulator-made — reaches every connected browser.
+// A hub fans out device updates to connected SSE clients. It is fed by the
+// broadcasting decorator on the aggregate store, so every successfully saved
+// change — human- or simulator-made — reaches every connected browser.
 type hub struct {
 	mu      sync.Mutex
 	clients map[chan []byte]struct{}

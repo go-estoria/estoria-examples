@@ -21,12 +21,12 @@ Click any device card to open its detail drawer, and open **Under the Hood**
 | Estoria feature | Where to see it |
 | --------------- | --------------- |
 | Long, ever-growing streams (one aggregate per device) | [`device.go`](./device.go), [`simulator.go`](./simulator.go) — a `ReadingRecorded` every 1.5–4s per device |
-| The full aggregate store decorator stack (`Store[E]` composition) | [`main.go`](./main.go) — `EventSourcedStore` → `SnapshottingStore` → `CachedStore` → `HookableStore` |
+| The full aggregate store decorator stack (`Store[E]` composition) | [`main.go`](./main.go) — `EventSourcedStore` → `SnapshottingStore` → `CachedStore` → an app-local broadcasting decorator |
 | Snapshots with `EventCountSnapshotPolicy` | Every 200 events per device (`-snapshot-every`); the 📸 toast announces each one |
 | Snapshots stored *as events* (`snapshotstore/eventstream`) | The `devicesnapshot_…` streams in the Under the Hood panel — same SQLite file, no extra storage |
 | Aggregate caching (`CachedStore` + `estoria-contrib` bigcache) | [`main.go`](./main.go) — hot loads skip storage entirely; `POST /api/devices/{id}/evict` proves it |
 | The hydration benchmark: cold replay vs snapshot vs cache | `handleBenchmark` in [`server.go`](./server.go); the bar chart in the detail drawer |
-| Lifecycle hooks (`AfterSave` powers the live dashboard) | [`main.go`](./main.go) — the hook broadcasts every saved change over SSE |
+| Writing your own store decorator (powers the live dashboard) | [`main.go`](./main.go) — `broadcastingStore` pushes every saved change over SSE |
 | Derived state with bounded memory (a ring buffer in the entity) | [`device_events.go`](./device_events.go) — the entity keeps the last 60 readings; the stream keeps them all |
 | Deriving a registry from `ListStreams` (no device table) | [`main.go`](./main.go) — every stream of type `device` *is* a device |
 | SQLite event store (`estoria-contrib`, pure Go) | [`main.go`](./main.go) — single-table strategy, WAL mode |
@@ -52,8 +52,8 @@ work from the read path:
   [bigcache](https://github.com/allegro/bigcache). Every save re-populates the
   cache, and the simulator saves constantly, so serving reads touch no storage
   at all. Loads become O(1).
-- **`HookableStore`** broadcasts every saved change over SSE, which is how the
-  dashboard stays live without polling.
+- **`broadcastingStore`** (app-local, ~15 lines) broadcasts every saved change
+  over SSE, which is how the dashboard stays live without polling.
 
 All four implement the same four-method `aggregatestore.Store[Device]` interface,
 so the stack is just constructor nesting in [`main.go`](./main.go).

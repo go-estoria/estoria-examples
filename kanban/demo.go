@@ -57,9 +57,9 @@ func nextHour(t time.Time) time.Time {
 // past estoria and truncates the storage tables directly, which is honest
 // about what it is: a demo affordance, not an event sourcing operation.
 //
-// The reseed saves through the hookable store, so the AfterSave hook
-// broadcasts the fresh board to every connected browser — open tabs return to
-// the starting state on their own, with no client-side handling.
+// The reseed saves through the broadcasting store, which pushes the fresh
+// board to every connected browser — open tabs return to the starting state
+// on their own, with no client-side handling.
 func (s *server) resetDemo(ctx context.Context) error {
 	// Block command handling for the duration: without this, a command that
 	// loaded the board a moment ago could save its event into the freshly
@@ -73,9 +73,9 @@ func (s *server) resetDemo(ctx context.Context) error {
 		}
 	}
 
-	// This save fires the AfterSave hook, which broadcasts while resetMu is
-	// held for writing. That is safe because the hub takes only its own lock
-	// and no handler broadcasts while holding resetMu — keep it that way.
+	// This save broadcasts through the decorator while resetMu is held for
+	// writing. That is safe because the hub takes only its own lock and no
+	// handler broadcasts while holding resetMu — keep it that way.
 	if err := seedBoard(ctx, s.live, s.boardID); err != nil {
 		return fmt.Errorf("reseeding board: %w", err)
 	}

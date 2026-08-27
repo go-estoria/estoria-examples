@@ -8,9 +8,9 @@ import (
 )
 
 // A hub fans out updates to connected SSE clients. It is fed from two places:
-// an AfterSave hook on the aggregate store (command accepted) and the outbox
-// handler (read model updated), so every browser sees both halves of the CQRS
-// flow as they happen.
+// the broadcasting decorator on the aggregate store (command accepted) and the
+// outbox handler (read model updated), so every browser sees both halves of
+// the CQRS flow as they happen.
 type hub struct {
 	// maxClients caps concurrent subscribers. Each one holds an open request
 	// and a goroutine, so on a public demo it's worth bounding; 0 means no cap.

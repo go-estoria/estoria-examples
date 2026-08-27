@@ -54,17 +54,14 @@ func newTestServer(t *testing.T) *server {
 		t.Fatal(err)
 	}
 
-	hookable, err := aggregatestore.NewHookableStore(eventSourced)
-	if err != nil {
-		t.Fatal(err)
-	}
+	broadcasts := newHub(0)
 
 	return &server{
-		live:    hookable,
+		live:    broadcastingStore{Store: eventSourced, hub: broadcasts},
 		history: eventSourced,
 		events:  eventStore,
 		db:      db,
-		hub:     newHub(0),
+		hub:     broadcasts,
 	}
 }
 

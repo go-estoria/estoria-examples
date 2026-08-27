@@ -26,7 +26,7 @@ later as a webhook delivery, and only then does the order list change.
 | **Transactional outbox** (`postgres/outbox`) | [`main.go`](./main.go) — registered via `WithAppendTransactionHooks`, so events and outbox rows commit atomically |
 | **CQRS read model** projected by the outbox | [`readmodel.go`](./readmodel.go) — the `order_summaries` table; the outbox handler is its only writer |
 | Eventual consistency, made visible | The outbox monitor panel; the list updates a beat after each command |
-| Lifecycle hooks (`AfterSave` powers the live sync) | [`main.go`](./main.go) — saved commands broadcast over SSE |
+| Writing your own store decorator (powers the live sync) | [`main.go`](./main.go) — `broadcastingStore` pushes saved commands over SSE |
 | Optimistic concurrency (`ExpectVersion` → `StreamVersionMismatchError`) | `runCommand` in [`server.go`](./server.go) maps conflicts to HTTP 409 |
 | Raw stream reads + projections (`eventstore/projection`) | The event timeline in the detail drawer: `orderTimeline` in [`server.go`](./server.go) |
 | One stream per aggregate instance | Each order is its own `order_<uuid>` stream (contrast with kanban's single shared stream) |

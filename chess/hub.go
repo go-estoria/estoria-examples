@@ -7,9 +7,9 @@ import (
 	"github.com/go-estoria/estoria"
 )
 
-// A hub fans out game updates to connected SSE clients. It is fed by an
-// AfterSave hook on the aggregate store, so every successfully saved move
-// reaches every connected browser. Messages are tagged with a game ID and
+// A hub fans out game updates to connected SSE clients. It is fed by the
+// broadcasting decorator on the aggregate store, so every successfully saved
+// move reaches every connected browser. Messages are tagged with a game ID and
 // clients filter for the game they are viewing (the lobby watches them all).
 type hub struct {
 	// maxClients caps concurrent subscribers. Each one holds an open request

@@ -4,8 +4,8 @@
 // a local SQLite database. The app demonstrates, end to end:
 //
 //   - aggregate modeling with pure ApplyTo event transitions
-//   - the aggregate store decorator stack: hooks -> snapshotting -> event-sourced
-//   - live collaboration via an AfterSave hook broadcasting over SSE
+//   - the aggregate store decorator stack: broadcasting -> snapshotting -> event-sourced
+//   - live collaboration via an app-local save decorator broadcasting over SSE
 //   - time travel with LoadOptions.ToVersion
 //   - optimistic concurrency surfaced as HTTP 409s
 //   - stream projections (the activity feed)
@@ -172,22 +172,14 @@ func run(ctx context.Context, addr, dbPath string, snapshotEvery int64, demo dem
 		return fmt.Errorf("creating snapshotting store: %w", err)
 	}
 
-	// 3. HookableStore: lifecycle hooks. The AfterSave hook is what makes the
-	//    app collaborative: every saved change is pushed to all SSE clients.
-	hookable, err := aggregatestore.NewHookableStore(snapshotting)
-	if err != nil {
-		return fmt.Errorf("creating hookable store: %w", err)
-	}
-
+	// 3. broadcastingStore: an app-local decorator. Pushing every saved
+	//    change to all SSE clients is what makes the app collaborative.
 	broadcasts := newHub(demo.maxClients)
-	hookable.AfterSave(func(_ context.Context, agg *aggregatestore.Aggregate[Board]) error {
-		broadcasts.broadcast(boardMessage{Version: agg.Version(), Live: true, Board: agg.State()})
-		return nil
-	})
+	live := broadcastingStore{Store: snapshotting, hub: broadcasts}
 
 	// seed a demo board on first run
 	if _, err := eventSourced.Load(ctx, boardUUID, nil); errors.Is(err, aggregatestore.ErrAggregateNotFound) {
-		if err := seedBoard(ctx, hookable, boardUUID); err != nil {
+		if err := seedBoard(ctx, live, boardUUID); err != nil {
 			return fmt.Errorf("seeding board: %w", err)
 		}
 		estoria.GetLogger().Info("seeded demo board", "board_id", typeid.New("board", boardUUID))
@@ -197,7 +189,7 @@ func run(ctx context.Context, addr, dbPath string, snapshotEvery int64, demo dem
 
 	srv := &server{
 		boardID:       boardUUID,
-		live:          hookable,
+		live:          live,
 		history:       eventSourced,
 		events:        eventStore,
 		db:            db,
@@ -260,7 +252,7 @@ func seedBoard(ctx context.Context, store aggregatestore.Store[Board], id uuid.U
 		CardAdded{CardID: dragCard, ColumnID: todo, Title: "Drag a card to another column",
 			Description: "Every drop appends a CardMoved event to the board's event stream. Nothing is ever updated in place.", Color: "blue"},
 		CardAdded{CardID: tabsCard, ColumnID: todo, Title: "Open this app in a second tab",
-			Description: "An AfterSave hook on the aggregate store broadcasts every change over SSE, so all tabs stay in sync.", Color: "purple"},
+			Description: "A save decorator on the aggregate store broadcasts every change over SSE, so all tabs stay in sync.", Color: "purple"},
 		CardAdded{CardID: editCard, ColumnID: todo, Title: "Click a card to edit it",
 			Description: "Edits append CardEdited events. The old state isn't lost — scrub the timeline to see it again.", Color: "teal"},
 		CardAdded{CardID: sliderCard, ColumnID: todo, Title: "Scrub the timeline below",
@@ -276,4 +268,21 @@ func seedBoard(ctx context.Context, store aggregatestore.Store[Board], id uuid.U
 	)
 
 	return store.Save(ctx, agg, nil)
+}
+
+// broadcastingStore decorates an aggregate store, pushing every successfully
+// saved board to all SSE clients.
+type broadcastingStore struct {
+	aggregatestore.Store[Board]
+	hub *hub
+}
+
+func (s broadcastingStore) Save(ctx context.Context, aggregate *aggregatestore.Aggregate[Board], opts *aggregatestore.SaveOptions) error {
+	if err := s.Store.Save(ctx, aggregate, opts); err != nil {
+		return err
+	}
+
+	s.hub.broadcast(boardMessage{Version: aggregate.Version(), Live: true, Board: aggregate.State()})
+
+	return nil
 }
