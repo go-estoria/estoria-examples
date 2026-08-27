@@ -49,6 +49,7 @@ jobs:
           - inspector
           - kanban
           - kurrent
+          - ledger
           - mongodb
           - opentelemetry
           - orders
@@ -81,6 +82,7 @@ jobs:
           - inspector
           - kanban
           - kurrent
+          - ledger
           - mongodb
           - opentelemetry
           - orders
