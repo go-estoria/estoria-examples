@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -51,6 +52,18 @@ type server struct {
 	// cache is the bigcache instance backing the CachedStore, held directly
 	// so the evict endpoint can delete entries out from under it.
 	cache *bigcache.BigCache
+
+	// db is the underlying database handle, used only by the demo reset
+	// (see demo.go) to clear storage directly.
+	db *sql.DB
+
+	// resetMu is held for writing while the demo reset clears and re-seeds the
+	// fleet, and for reading while a request reads it. It is uncontended in
+	// normal operation: without -hourly-reset nothing ever takes the write side.
+	resetMu sync.RWMutex
+
+	// deviceCount is the fleet size to re-register after a demo reset.
+	deviceCount int
 
 	reg *registry
 	sim *simulator
@@ -113,6 +126,9 @@ func (s *server) deviceID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bo
 // handleFleet returns every registered device at its latest version, loaded
 // through the full decorated stack (in the steady state, all cache hits).
 func (s *server) handleFleet(w http.ResponseWriter, r *http.Request) {
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	ctx := r.Context()
 
 	fleet := []deviceMessage{}
@@ -133,6 +149,9 @@ func (s *server) handleFleet(w http.ResponseWriter, r *http.Request) {
 // handleGetDevice returns one device, plus the version of its latest snapshot
 // (0 if no snapshot has been taken yet).
 func (s *server) handleGetDevice(w http.ResponseWriter, r *http.Request) {
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	ctx := r.Context()
 
 	id, ok := s.deviceID(w, r)
@@ -184,6 +203,9 @@ type benchmarkResult struct {
 // as an illustration, not a controlled microbenchmark — the *ratios* are the
 // story, and they widen as the stream grows.
 func (s *server) handleBenchmark(w http.ResponseWriter, r *http.Request) {
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	ctx := r.Context()
 
 	id, ok := s.deviceID(w, r)
@@ -256,6 +278,9 @@ func (s *server) handleSimStop(w http.ResponseWriter, _ *http.Request) {
 // in the event store (device streams and their parallel snapshot streams),
 // event totals, the write rate, and the aggregate store decorator stack.
 func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
+	s.resetMu.RLock()
+	defer s.resetMu.RUnlock()
+
 	ctx := r.Context()
 
 	type streamInfo struct {
@@ -339,7 +364,11 @@ func (s *server) handleWatch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	rc := http.NewResponseController(w)
 
-	ch := s.hub.subscribe()
+	ch, ok := s.hub.subscribe()
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "too many live connections right now — try again shortly")
+		return
+	}
 	defer s.hub.unsubscribe(ch)
 
 	// send the current state of the whole fleet immediately so a
