@@ -45,6 +45,14 @@ func (r *registry) contains(id uuid.UUID) bool {
 	return false
 }
 
+// reset empties the registry. Used only by the hosted demo's hourly reset,
+// which deletes the device streams this tracks (see demo.go).
+func (r *registry) reset() {
+	r.mu.Lock()
+	r.ids = nil
+	r.mu.Unlock()
+}
+
 func (r *registry) count() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

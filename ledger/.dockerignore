@@ -1,6 +1,2 @@
+# Local build output never belongs in the image.
 ledger
-go.work
-go.work.sum
-docker-compose.yml
-Makefile
-README.md

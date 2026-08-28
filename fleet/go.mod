@@ -7,6 +7,7 @@ require (
 	github.com/go-estoria/estoria v0.14.0
 	github.com/go-estoria/estoria-contrib v0.11.1
 	github.com/gofrs/uuid/v5 v5.4.0
+	golang.org/x/time v0.15.0
 	modernc.org/sqlite v1.54.0
 )
 

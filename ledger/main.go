@@ -50,6 +50,15 @@ func main() {
 	addr := flag.String("addr", defaultAddr(":8084"), "HTTP listen address")
 	dsn := flag.String("dsn", defaultDSN("postgres://estoria:estoria@localhost:5434/estoria?sslmode=disable"),
 		"Postgres DSN (the default matches docker-compose.yml, or $DATABASE_URL when set)")
+
+	// Hosted-demo settings, inert by default (see demo.go).
+	resetOnBoot := flag.Bool("reset-on-boot", false,
+		"drop every table this app owns at startup, so each deploy starts clean (for public demos)")
+	writesPerMinute := flag.Int("writes-per-minute", 0,
+		"per-IP limit on state-changing requests (0 disables)")
+	trustProxy := flag.Bool("trust-proxy", false,
+		"read the client IP from X-Forwarded-For (only behind a trusted proxy)")
+
 	flag.Parse()
 
 	estoria.SetLogger(estoria.DefaultLogger())
@@ -57,13 +66,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, *addr, *dsn); err != nil {
+	if err := run(ctx, *addr, *dsn, *resetOnBoot, *writesPerMinute, *trustProxy); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, addr, dsn string) error {
+func run(ctx context.Context, addr, dsn string, resetOnBoot bool, writesPerMinute int, trustProxy bool) error {
 	// The whole app winds down together: a fatal background failure cancels
 	// this context the same way a signal does.
 	ctx, cancel := context.WithCancel(ctx)
@@ -76,6 +85,16 @@ func run(ctx context.Context, addr, dsn string) error {
 		return fmt.Errorf("creating connection pool: %w", err)
 	}
 	defer pool.Close()
+
+	// A hosted demo starts from nothing each deploy: wipe before the schema
+	// below recreates it, which also heals a schema left behind by an older
+	// build (see demo.go).
+	if resetOnBoot {
+		if err := resetStore(ctx, pool); err != nil {
+			return fmt.Errorf("resetting store at boot: %w", err)
+		}
+		estoria.GetLogger().Info("reset store at boot")
+	}
 
 	// 1. The event store: domain streams and the projection's lifecycle
 	// stream share it, so one global sequence orders everything and one
@@ -183,7 +202,16 @@ func run(ctx context.Context, addr, dsn string) error {
 		log:          log,
 	}
 
-	httpServer := &http.Server{Addr: addr, Handler: srv.routes(), ReadHeaderTimeout: 5 * time.Second}
+	// Hosted-demo limiting, off unless -writes-per-minute is passed. Reads are
+	// never limited: watching a rebuild fill a table is the whole point.
+	handler := srv.routes()
+	if writesPerMinute > 0 {
+		limiter := newRateLimiter(writesPerMinute, trustProxy)
+		go limiter.runSweeper(ctx)
+		handler = limiter.middleware(handler)
+	}
+
+	httpServer := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	go func() {
 		<-ctx.Done()

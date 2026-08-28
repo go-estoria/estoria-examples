@@ -40,11 +40,57 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// The storage strategy's table names. They match its defaults, but are named
+// here because the demo reset deletes from them directly (see demo.go), and
+// that coupling should be visible rather than implied.
+const (
+	eventsTable  = "event"
+	streamsTable = "stream"
+)
+
+// demoConfig holds the settings that only matter when this example is hosted
+// publicly. Every one of them is inert by default: run the example locally and
+// it behaves exactly as it did before any of this existed.
+type demoConfig struct {
+	// hourlyReset clears the fleet's history at the top of every hour. Unlike
+	// the other examples this matters for more than tidiness: the simulator
+	// appends continuously, so the streams would otherwise grow without bound.
+	hourlyReset bool
+
+	// pauseWhenIdleAfter stops the simulator once nobody has been watching for
+	// this long, and restarts it when someone connects. Zero runs it
+	// continuously, which is what a local run wants.
+	pauseWhenIdleAfter time.Duration
+
+	// writesPerMinute caps state-changing requests per client IP (0 disables).
+	writesPerMinute int
+
+	// trustProxy reads the client IP from X-Forwarded-For. Only safe behind a
+	// proxy that overwrites that header.
+	trustProxy bool
+
+	// maxClients caps concurrent SSE connections (0 disables).
+	maxClients int
+}
+
 func main() {
-	addr := flag.String("addr", ":8083", "HTTP listen address")
+	addr := flag.String("addr", defaultAddr(":8083"), "HTTP listen address")
 	dbPath := flag.String("db", "fleet.db", "path to the SQLite database file")
 	devices := flag.Int("devices", 12, "number of simulated devices")
 	snapshotEvery := flag.Int64("snapshot-every", 200, "take an aggregate snapshot every N events")
+
+	var demo demoConfig
+	flag.BoolVar(&demo.hourlyReset, "hourly-reset", false,
+		"clear the fleet's history and re-register devices at the top of every hour (for public demos)")
+	flag.DurationVar(&demo.pauseWhenIdleAfter, "pause-when-idle", 0,
+		"pause the simulator once nobody has been watching for this long (0 runs it continuously)")
+	flag.IntVar(&demo.writesPerMinute, "writes-per-minute", 0,
+		"per-IP limit on state-changing requests (0 disables)")
+	flag.BoolVar(&demo.trustProxy, "trust-proxy", false,
+		"read the client IP from X-Forwarded-For (only behind a trusted proxy)")
+	flag.IntVar(&demo.maxClients, "max-clients", 0,
+		"maximum concurrent live (SSE) connections (0 disables)")
+
 	flag.Parse()
 
 	if os.Getenv("DEBUG") != "" {
@@ -58,13 +104,23 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, *addr, *dbPath, *devices, *snapshotEvery); err != nil {
+	if err := run(ctx, *addr, *dbPath, *devices, *snapshotEvery, demo); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery int64) error {
+// defaultAddr honors the PORT environment variable, which is how container
+// platforms (Railway, Fly, Cloud Run, ...) tell a process where to listen.
+// An explicit -addr still wins, since flag parsing overrides this default.
+func defaultAddr(fallback string) string {
+	if port := os.Getenv("PORT"); port != "" {
+		return ":" + port
+	}
+	return fallback
+}
+
+func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery int64, demo demoConfig) error {
 	if devices < 1 {
 		return errors.New("-devices must be at least 1")
 	}
@@ -84,7 +140,10 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 	}
 
 	// the default strategy stores all streams in a single table
-	strat, err := sqlstrategy.NewDefaultStrategy()
+	strat, err := sqlstrategy.NewDefaultStrategy(
+		sqlstrategy.WithEventsTableName(eventsTable),
+		sqlstrategy.WithStreamsTableName(streamsTable),
+	)
 	if err != nil {
 		return fmt.Errorf("creating strategy: %w", err)
 	}
@@ -145,7 +204,7 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 
 	// 4. broadcastingStore: an app-local decorator. Pushing every saved
 	//    change to all SSE clients is what makes the dashboard live.
-	broadcasts := newHub()
+	broadcasts := newHub(demo.maxClients)
 	live := broadcastingStore{Store: cached, hub: broadcasts}
 
 	// The registry of device IDs is derived from the event store itself:
@@ -171,8 +230,13 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 	// the simulator is the fleet: one goroutine per device, writing through
 	// the full decorated stack
 	sim := newSimulator(ctx, live, reg)
-	sim.start()
 	defer sim.stop()
+
+	// Started here unless the idle supervisor owns it (see demo.go), in which
+	// case it starts when the first client connects.
+	if demo.pauseWhenIdleAfter <= 0 {
+		sim.start()
+	}
 
 	srv := &server{
 		live:          live,
@@ -181,13 +245,29 @@ func run(ctx context.Context, addr, dbPath string, devices int, snapshotEvery in
 		events:        eventStore,
 		snapshots:     snapStore,
 		cache:         cacheBackend,
+		db:            db,
+		deviceCount:   devices,
 		reg:           reg,
 		sim:           sim,
 		hub:           broadcasts,
 		snapshotEvery: snapshotEvery,
 	}
 
-	httpServer := &http.Server{Addr: addr, Handler: srv.routes()}
+	// Hosted-demo behavior, all off by default (see demoConfig).
+	handler := srv.routes()
+	if demo.writesPerMinute > 0 {
+		limiter := newRateLimiter(demo.writesPerMinute, demo.trustProxy)
+		go limiter.runSweeper(ctx)
+		handler = limiter.middleware(handler)
+	}
+	if demo.pauseWhenIdleAfter > 0 {
+		go srv.runIdleSupervisor(ctx, demo.pauseWhenIdleAfter)
+	}
+	if demo.hourlyReset {
+		go srv.runHourlyReset(ctx)
+	}
+
+	httpServer := &http.Server{Addr: addr, Handler: handler}
 
 	go func() {
 		<-ctx.Done()

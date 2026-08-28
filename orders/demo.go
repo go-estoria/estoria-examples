@@ -52,21 +52,23 @@ func nextHour(t time.Time) time.Time {
 // resetDemo deletes every order: the event streams, the undelivered outbox
 // rows, and the read model built from them.
 //
-// Note what this does *not* do: it doesn't ask estoria to delete anything. An
-// event store is append-only — that's the premise, and the core interface
-// offers reads and appends and nothing else — so the reset reaches past
-// estoria and truncates the storage tables directly, which is honest about
-// what it is: a demo affordance, not an event sourcing operation.
+// It drops and recreates rather than truncating, which matters for a hosted
+// demo beyond tidiness. A deploy carrying a library upgrade may expect columns
+// the existing tables don't have — `CREATE TABLE IF NOT EXISTS` is a no-op on
+// a table that already exists, so the app would start, serve reads, pass its
+// health check, and fail every write. Rebuilding the schema makes that drift
+// self-heal instead of becoming a silent half-outage.
 //
-// The read model is the one table here that *is* legitimately disposable:
-// it's derived data, rebuildable from the streams by definition. That it gets
-// truncated alongside them is a CQRS property, not a compromise.
+// Note what this does *not* do: it doesn't ask estoria to delete anything. The
+// core interface offers reads and appends, and a StreamDeleter for backends
+// that can remove committed events — none of which is the right tool for
+// "throw the whole store away and start over". So the reset reaches past
+// estoria to the storage directly, which is honest about what it is: a demo
+// affordance, not an event sourcing operation.
 //
-// All four tables go in one transaction. The outbox processor runs
-// concurrently and could, in the millisecond-wide gap, project an event whose
-// stream this just deleted, leaving one orphaned summary row — which the next
-// reset clears. Stopping and restarting the processor to close that window
-// would cost more clarity than the orphan costs correctness.
+// The read model is the one table here that is legitimately disposable: it's
+// derived data, rebuildable from the streams by definition. That it goes with
+// them is a CQRS property, not a compromise.
 func (s *server) resetDemo(ctx context.Context) error {
 	// Block command handling for the duration: without this, a command that
 	// loaded its order a moment ago could save into a stream that no longer
@@ -81,9 +83,13 @@ func (s *server) resetDemo(ctx context.Context) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	for _, table := range []string{eventsTable, streamsTable, outboxTable, readModelTable} {
-		if _, err := tx.Exec(ctx, "TRUNCATE TABLE "+table); err != nil {
-			return fmt.Errorf("truncating table %s: %w", table, err)
+		if _, err := tx.Exec(ctx, "DROP TABLE IF EXISTS "+table); err != nil {
+			return fmt.Errorf("dropping table %s: %w", table, err)
 		}
+	}
+
+	if err := s.createSchema(ctx, tx); err != nil {
+		return fmt.Errorf("recreating schema: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

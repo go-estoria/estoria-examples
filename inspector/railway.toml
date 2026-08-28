@@ -1,0 +1,28 @@
+# Railway service configuration for the event store inspector.
+#
+# One thing here cannot be set from a config file: the service's **Root
+# Directory**, which must be set to `/inspector` in the Railway dashboard
+# (Settings -> Source). Without it Railway builds from the repository root,
+# finds no go.mod and no Dockerfile, and fails with "could not determine how
+# to build the app" — this repo has no root module by design, since every
+# example is its own.
+#
+# With the root directory set, the Dockerfile in this folder is used, and $PORT
+# is injected by the platform.
+#
+# This service also needs $DATABASE_URL, referencing whichever store it should
+# browse — e.g. ${{Postgres.DATABASE_URL}} for the ledger or orders database.
+# It is strictly read-only: the store is held as an eventstore.StreamReader and
+# the app never calls AppendStream.
+
+[build]
+builder = "DOCKERFILE"
+
+# Gitignore-style, relative to the repository root: only changes under this
+# example redeploy this service. Without it, every merge to main redeploys
+# every service in the project, since they all watch the same repo.
+watchPatterns = ["/inspector/**"]
+
+[deploy]
+healthcheckPath = "/"
+restartPolicyType = "ON_FAILURE"

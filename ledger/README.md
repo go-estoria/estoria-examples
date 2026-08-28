@@ -83,3 +83,32 @@ processor is the live tail, and when the run winds down, the steady-state
 manager takes over. The manager's one rule lives in
 [`serving.go`](serving.go): tail the live version, unless the in-flight
 attempt targets it.
+
+## Deploying it
+
+The example ships a Dockerfile: a two-stage build ending in distroless static
+(about 21 MB, no shell, runs as nonroot). pgx is pure Go, so `CGO_ENABLED=0` is
+all it takes. The console's assets are served from disk, so they are copied in
+alongside the binary.
+
+```sh
+docker build -t estoria-ledger .
+docker run -p 8084:8084 -e DATABASE_URL=postgres://... estoria-ledger
+```
+
+On Railway, add a service pointed at this repository, set its **Root Directory**
+to `/ledger`, and give it a Postgres service to reference. It listens on `$PORT`
+and reads its DSN from `$DATABASE_URL` when they are set.
+
+Three flags exist only for public hosting:
+
+| Flag | Effect |
+| --- | --- |
+| `-reset-on-boot` | drop every table this app owns at startup, so each deploy starts from an empty store |
+| `-writes-per-minute N` | per-IP token bucket on state-changing requests; reads are never limited |
+| `-trust-proxy` | take the client IP from `X-Forwarded-For` (only behind a proxy that overwrites it) |
+
+`-reset-on-boot` also heals schema drift. A deploy carrying a library upgrade
+may expect columns the existing tables don't have, and `CREATE TABLE IF NOT
+EXISTS` is a no-op on a table that already exists — so without it the app would
+start, serve reads, pass its health check, and fail every write.

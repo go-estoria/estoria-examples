@@ -57,6 +57,20 @@ func (s *server) routes() http.Handler {
 	return mux
 }
 
+// routesWithScanLimit is routes with a per-IP limiter in front of the
+// endpoints that scan the whole store, for hosted deployments.
+//
+// Only /api/all/tail is metered. Everything else — stream lists, paged stream
+// reads, forward feed pages — is bounded work the backend can serve all day,
+// and metering it would only make a public demo feel broken.
+func (s *server) routesWithScanLimit(rl *rateLimiter) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("/", s.routes())
+	mux.Handle("GET /api/all/tail", rl.middleware(http.HandlerFunc(s.handleAllTail)))
+
+	return mux
+}
+
 // handleInfo describes the connected backend: its label, redacted DSN, and
 // which optional capabilities are available. The UI uses this to decide which
 // affordances to show.

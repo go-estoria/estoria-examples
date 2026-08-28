@@ -11,21 +11,40 @@ import (
 // broadcasting decorator on the aggregate store, so every successfully saved
 // change — human- or simulator-made — reaches every connected browser.
 type hub struct {
+	// maxClients caps concurrent subscribers. Each one holds an open request
+	// and a goroutine, so on a public demo it's worth bounding; 0 means no cap.
+	maxClients int
+
 	mu      sync.Mutex
 	clients map[chan []byte]struct{}
 }
 
-func newHub() *hub {
-	return &hub{clients: make(map[chan []byte]struct{})}
+func newHub(maxClients int) *hub {
+	return &hub{maxClients: maxClients, clients: make(map[chan []byte]struct{})}
 }
 
-// subscribe registers a new client and returns its message channel.
-func (h *hub) subscribe() chan []byte {
-	ch := make(chan []byte, 64)
+// subscribe registers a new client and returns its message channel. It returns
+// false when the hub is already at capacity.
+func (h *hub) subscribe() (chan []byte, bool) {
 	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.maxClients > 0 && len(h.clients) >= h.maxClients {
+		return nil, false
+	}
+
+	ch := make(chan []byte, 64)
 	h.clients[ch] = struct{}{}
-	h.mu.Unlock()
-	return ch
+
+	return ch, true
+}
+
+// count returns the number of connected clients. The idle supervisor uses it
+// to decide whether anyone is watching (see demo.go).
+func (h *hub) count() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.clients)
 }
 
 // unsubscribe removes a client registered via subscribe.

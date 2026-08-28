@@ -20,6 +20,7 @@ import (
 	"github.com/go-estoria/estoria/projection"
 	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -42,6 +43,10 @@ type server struct {
 	// pool is the underlying connection pool, used only by the demo reset
 	// (see demo.go) to clear storage directly.
 	pool *pgxpool.Pool
+
+	// createSchema applies every DDL statement this app needs, inside the
+	// caller's transaction. The demo reset uses it to rebuild what it dropped.
+	createSchema func(ctx context.Context, tx pgx.Tx) error
 
 	// resetMu is held for writing while the demo reset clears the database,
 	// and for reading while a command runs. It is uncontended in normal

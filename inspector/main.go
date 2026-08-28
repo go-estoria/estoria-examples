@@ -35,9 +35,17 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", ":8085", "HTTP listen address")
+	addr := flag.String("addr", defaultAddr(":8085"), "HTTP listen address")
 	backendName := flag.String("backend", "sqlite", "event store backend ("+strings.Join(backendNames(), ", ")+")")
-	dsn := flag.String("dsn", "../kanban/kanban.db", "backend DSN (sqlite: path to the database file; postgres: connection URL)")
+	dsn := flag.String("dsn", defaultDSN("../kanban/kanban.db"), "backend DSN (sqlite: path to the database file; postgres: connection URL) — or $DATABASE_URL")
+
+	// Hosted-demo limits. The inspector never writes, so there is nothing to
+	// reset and no commands to throttle; what needs bounding is read cost.
+	// Every /api/all/tail is a full forward scan (see server.go), so on a
+	// public URL it is the one endpoint worth metering.
+	readsPerMinute := flag.Int("reads-per-minute", 0, "per-IP limit on scan-heavy reads (0 disables)")
+	trustProxy := flag.Bool("trust-proxy", false, "read the client IP from X-Forwarded-For (only behind a trusted proxy)")
+
 	flag.Parse()
 
 	if os.Getenv("DEBUG") != "" {
@@ -51,13 +59,32 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, *addr, *backendName, *dsn); err != nil {
+	if err := run(ctx, *addr, *backendName, *dsn, *readsPerMinute, *trustProxy); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, addr, backendName, dsn string) error {
+// defaultAddr honors the PORT environment variable, which is how container
+// platforms (Railway, Fly, Cloud Run, ...) tell a process where to listen.
+// An explicit -addr still wins, since flag parsing overrides this default.
+func defaultAddr(fallback string) string {
+	if port := os.Getenv("PORT"); port != "" {
+		return ":" + port
+	}
+	return fallback
+}
+
+// defaultDSN honors DATABASE_URL, so a hosted inspector can be pointed at a
+// managed Postgres without a command-line change. An explicit -dsn still wins.
+func defaultDSN(fallback string) string {
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		return url
+	}
+	return fallback
+}
+
+func run(ctx context.Context, addr, backendName, dsn string, readsPerMinute int, trustProxy bool) error {
 	entry, ok := backends[backendName]
 	if !ok {
 		return fmt.Errorf("unknown backend %q (available: %s)", backendName, strings.Join(backendNames(), ", "))
@@ -70,7 +97,15 @@ func run(ctx context.Context, addr, backendName, dsn string) error {
 	defer b.close()
 
 	srv := &server{backend: b}
-	httpServer := &http.Server{Addr: addr, Handler: srv.routes()}
+
+	handler := srv.routes()
+	if readsPerMinute > 0 {
+		limiter := newRateLimiter(readsPerMinute, trustProxy)
+		go limiter.runSweeper(ctx)
+		handler = srv.routesWithScanLimit(limiter)
+	}
+
+	httpServer := &http.Server{Addr: addr, Handler: handler}
 
 	go func() {
 		<-ctx.Done()

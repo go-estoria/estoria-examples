@@ -1,0 +1,5 @@
+# Local build output and databases never belong in the image.
+inspector
+*.db
+*.db-shm
+*.db-wal
