@@ -494,18 +494,33 @@ func TestInspectorEndToEnd(t *testing.T) {
 		}
 	})
 
-	t.Run("global feed reads in reverse for tail bootstrap", func(t *testing.T) {
-		body := getBody(t, ts, "/api/all?dir=reverse&count=3", http.StatusOK)
+	// Global reads are forward-only, so the newest events cannot be fetched by
+	// reading backwards. The tail endpoint scans forward and keeps the last
+	// page, which is what the feed opens on.
+	t.Run("tail endpoint returns the newest events, ascending", func(t *testing.T) {
+		body := getBody(t, ts, "/api/all/tail?count=3", http.StatusOK)
 		raw := body["events"].([]any)
 		positions := make([]float64, len(raw))
 		for i, e := range raw {
 			positions[i] = e.(map[string]any)["globalPosition"].(float64)
 		}
-		if len(positions) != 3 || positions[0] != 11 || positions[1] != 10 || positions[2] != 9 {
-			t.Errorf("reverse positions = %v, want [11 10 9]", positions)
+		if len(positions) != 3 || positions[0] != 9 || positions[1] != 10 || positions[2] != 11 {
+			t.Errorf("tail positions = %v, want [9 10 11]", positions)
 		}
-		if body["hasMore"] != true || body["nextAfter"] != float64(8) {
-			t.Errorf("pager = hasMore:%v nextAfter:%v, want true/8", body["hasMore"], body["nextAfter"])
+		// total reports the whole store, so the UI can say "newest N of M"
+		if body["total"] != float64(11) {
+			t.Errorf("total = %v, want 11", body["total"])
+		}
+		// resuming the live tail from here must yield nothing yet
+		if body["nextAfter"] != float64(11) {
+			t.Errorf("nextAfter = %v, want 11 (the frontier)", body["nextAfter"])
+		}
+	})
+
+	t.Run("tail of an over-large count returns everything", func(t *testing.T) {
+		body := getBody(t, ts, "/api/all/tail?count=500", http.StatusOK)
+		if raw := body["events"].([]any); len(raw) != 11 {
+			t.Errorf("got %d events, want all 11", len(raw))
 		}
 	})
 

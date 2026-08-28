@@ -30,8 +30,7 @@ const state = {
   feed: [],
   feedLoaded: false,
   feedMaxPos: 0,    // highest global position seen (tail cursor)
-  feedOlderAfter: 0,
-  feedHasOlder: false,
+  feedTotal: 0,
 
   tailTimer: null,
   activeTab: "streams",
@@ -226,33 +225,25 @@ function setDirection(dir) {
 /* ============ global feed ============ */
 
 async function loadFeedInitial() {
-  // Grab the newest page by reading in reverse, then display it ascending
-  // (newest last). Older pages keep paging in reverse from nextAfter.
-  const res = await getJSON(`/api/all?dir=reverse&count=${FEED_PAGE}`);
+  // Global reads are forward-only, so the newest events can't be fetched by
+  // reading backwards from the end. /api/all/tail scans forward and keeps the
+  // last page, then hands back the position to resume tailing from.
+  const res = await getJSON(`/api/all/tail?count=${FEED_PAGE}`);
   if (!res) return;
 
-  state.feed = res.events.slice().reverse();
+  state.feed = res.events;
   state.feedLoaded = true;
-  state.feedHasOlder = res.hasMore;
-  state.feedOlderAfter = res.nextAfter;
-  state.feedMaxPos = maxGlobalPos(state.feed, 0);
+  state.feedTotal = res.total;
+  state.feedMaxPos = res.nextAfter;
   renderFeed();
   scrollFeedToBottom();
 }
 
-async function loadFeedOlder() {
-  const res = await getJSON(`/api/all?dir=reverse&after=${state.feedOlderAfter}&count=${FEED_PAGE}`);
-  if (!res) return;
-
-  state.feed = res.events.slice().reverse().concat(state.feed);
-  state.feedHasOlder = res.hasMore;
-  state.feedOlderAfter = res.nextAfter;
-  renderFeed();
-}
-
 async function pollFeed() {
-  // Forward from the last seen global position: AfterVersion is an exclusive
-  // lower bound on GlobalPosition for ReadAll, so this returns only news.
+  // Forward from the last seen global position: AfterPosition is an exclusive
+  // lower bound, and the stable-prefix contract guarantees nothing new can
+  // commit at or below a position already yielded — so this returns only news,
+  // with no gaps.
   const res = await getJSON(`/api/all?after=${state.feedMaxPos}&count=${FEED_PAGE}`);
   if (!res || res.events.length === 0) return;
 
@@ -296,10 +287,12 @@ function renderFeed() {
     tbody.appendChild(row);
   }
 
-  $("#feed-older").hidden = !state.feedHasOlder;
-  $("#feed-status").textContent = state.feed.length === 0
+  const shown = state.feed.length;
+  const hidden = Math.max(state.feedTotal - shown, 0);
+  $("#feed-status").textContent = shown === 0
     ? "no events in the store"
-    : `${state.feed.length} event${state.feed.length === 1 ? "" : "s"}` +
+    : `${shown} event${shown === 1 ? "" : "s"}` +
+      (hidden > 0 ? ` (newest of ${state.feedTotal})` : "") +
       (state.feedMaxPos > 0 ? ` — tail at #${state.feedMaxPos}` : "");
 }
 
@@ -449,7 +442,6 @@ function wireChrome() {
   $("#dir-reverse").addEventListener("click", () => setDirection("reverse"));
   $("#dir-forward").addEventListener("click", () => setDirection("forward"));
   $("#stream-more").addEventListener("click", () => loadStreamPage(false));
-  $("#feed-older").addEventListener("click", loadFeedOlder);
 
   $("#tail-checkbox").addEventListener("change", (e) => {
     if (e.target.checked && state.activeTab !== "feed") switchTab("feed");

@@ -19,7 +19,7 @@ import (
 	sqlstore "github.com/go-estoria/estoria-contrib/sqlite/eventstore"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
-	"github.com/go-estoria/estoria/eventstore/projection"
+	"github.com/go-estoria/estoria/projection"
 	streamsnapshots "github.com/go-estoria/estoria/snapshotstore/eventstream"
 	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
@@ -373,7 +373,7 @@ func (s *server) handleActivity(w http.ResponseWriter, r *http.Request) {
 	}
 	defer iter.Close(ctx)
 
-	proj, err := projection.New(iter)
+	proj, err := projection.NewFold(iter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
