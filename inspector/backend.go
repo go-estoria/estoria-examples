@@ -44,15 +44,7 @@ type streamInfo struct {
 // degrades gracefully.
 type capabilities struct {
 	listStreams func(ctx context.Context) ([]streamInfo, error)
-	readAll     func(ctx context.Context, opts eventstore.ReadStreamOptions) (eventstore.StreamIterator, error)
-}
-
-// allReader is the shape shared by stores that can read the global event
-// feed. The SQLite and Postgres contrib stores happen to expose ReadAll with
-// identical signatures, so a type assertion against this local interface is
-// enough to adapt either of them — no core interface required.
-type allReader interface {
-	ReadAll(ctx context.Context, opts eventstore.ReadStreamOptions) (eventstore.StreamIterator, error)
+	readAll     func(ctx context.Context, opts eventstore.ReadAllOptions) (eventstore.StreamIterator, error)
 }
 
 // A backend is a connected event store plus whatever optional capabilities
@@ -154,9 +146,12 @@ func connectSQLite(ctx context.Context, path string) (*backend, error) {
 		},
 	}
 
-	// ReadAll needs no adapting — the concrete method already has the shape
-	// the inspector wants, so capability discovery is a type assertion.
-	if reader, ok := any(store).(allReader); ok {
+	// Global reads need no adapting at all: eventstore.GlobalReader is a core
+	// interface, so discovery is a type assertion against the core type and
+	// the method is used as-is. Contrast the listStreams closure above, which
+	// exists only because ListStreams has no core interface and each backend
+	// returns its own strategy package's metadata type.
+	if reader, ok := any(store).(eventstore.GlobalReader); ok {
 		caps.readAll = reader.ReadAll
 	}
 
@@ -226,7 +221,7 @@ func connectPostgres(ctx context.Context, dsn string) (*backend, error) {
 		},
 	}
 
-	if reader, ok := any(store).(allReader); ok {
+	if reader, ok := any(store).(eventstore.GlobalReader); ok {
 		caps.readAll = reader.ReadAll
 	}
 

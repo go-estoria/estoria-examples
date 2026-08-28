@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/go-estoria/estoria v0.14.0
-	github.com/go-estoria/estoria-contrib v0.11.0
+	github.com/go-estoria/estoria-contrib v0.11.1
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/jackc/pgx/v5 v5.10.0
 )

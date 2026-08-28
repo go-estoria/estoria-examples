@@ -17,7 +17,7 @@ import (
 	pgeventstore "github.com/go-estoria/estoria-contrib/postgres/eventstore"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
-	"github.com/go-estoria/estoria/eventstore/projection"
+	"github.com/go-estoria/estoria/projection"
 	"github.com/go-estoria/estoria/typeid"
 	"github.com/gofrs/uuid/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -332,7 +332,7 @@ func (s *server) orderTimeline(ctx context.Context, id uuid.UUID) ([]timelineEnt
 	}
 	defer iter.Close(ctx)
 
-	proj, err := projection.New(iter)
+	proj, err := projection.NewFold(iter)
 	if err != nil {
 		return nil, err
 	}

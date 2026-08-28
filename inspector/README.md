@@ -33,15 +33,17 @@ For a live demo, run the kanban example and the inspector side by side, enable
 | --------------- | --------------- |
 | Everything stream-scoped via the core `eventstore.StreamReader` alone | `handleStreamEvents` in [`server.go`](./server.go) — works on **any** backend |
 | `ReadStreamOptions` paging semantics (`AfterVersion`, `Count`, `Direction`) | The Newest/Oldest-first toggle and "Load more" pager |
-| Backend-specific extras (`ListStreams`, `ReadAll`) modeled as **optional capabilities** | [`backend.go`](./backend.go) — and the design question below |
+| Optional capabilities: `GlobalReader` from core, `ListStreams` adapted per backend | [`backend.go`](./backend.go) — and the design discussion below |
 | Graceful degradation when a capability is missing | 501 responses in [`server.go`](./server.go); the UI falls back to manual stream-ID entry |
 | Global ordering via `Event.GlobalPosition` | The Global feed tab, and the tail cursor it polls with |
 | Snapshots are just events in a parallel stream | Streams whose type ends in `snapshot` get a 📸 chip |
 | One tool, many stores (SQLite and Postgres contrib stores) | The backend registry in [`backend.go`](./backend.go) |
 
-## The design question
+## The design question, and how it was answered
 
-This example exists to make an open interface-design question concrete.
+This example was built to make an open interface-design question concrete, and
+it has since been settled — differently for each of the two capabilities, which
+is what makes the code worth reading now.
 
 Estoria's core `eventstore.Store` interface is deliberately tiny:
 
@@ -52,56 +54,53 @@ type Store interface {
 }
 ```
 
-Two operations this tool wants — **listing the streams in a store** and **reading all
-events in global order** — are not part of that contract. The SQLite and Postgres
-contrib stores both provide them, but as *concrete methods*:
+Two operations this tool wants — **listing the streams in a store** and
+**reading all events in global order** — were not part of that contract. Both
+were available on the SQLite and Postgres contrib stores, but only as concrete
+methods, so a generic tool had to adapt each backend by hand.
+
+**Global reads were promoted to core**, as `eventstore.GlobalReader`: optional,
+discovered by type assertion, and carrying a genuinely demanding contract —
+positions form a *stable prefix* (once position P is yielded, nothing new may
+ever commit at or below P), and a read observes a finite frontier. That contract
+is what makes a position a resumable checkpoint instead of a hint. Discovery is
+now one assertion against a core type, and the method is used unmodified:
 
 ```go
-// sqlite:   func (s *EventStore) ListStreams(ctx) ([]sqlitestrategy.StreamMetadata, error)
-// postgres: func (s *EventStore) ListStreams(ctx) ([]pgstrategy.StreamMetadata, error)
-//
-// both:     func (s *EventStore) ReadAll(ctx, eventstore.ReadStreamOptions) (eventstore.StreamIterator, error)
-```
-
-Note the return types: each backend's `ListStreams` returns *its own* strategy
-package's `StreamMetadata`. There is no shared interface to program against, so a
-generic tool has two options, and this example implements one of them fully so the
-trade-off can be judged on real code:
-
-**The cost of keeping the core minimal** is visible in [`backend.go`](./backend.go).
-The inspector defines its own `streamInfo` type and a `capabilities` struct with
-plain function fields:
-
-```go
-type capabilities struct {
-    listStreams func(ctx context.Context) ([]streamInfo, error)
-    readAll     func(ctx context.Context, opts eventstore.ReadStreamOptions) (eventstore.StreamIterator, error)
+if reader, ok := any(store).(eventstore.GlobalReader); ok {
+    caps.readAll = reader.ReadAll
 }
 ```
 
-Each backend entry adapts its store into these fields. The two `listStreams`
-closures are textually identical but compile against different concrete types —
-that duplication is the per-backend adapter tax, and it grows with each backend
-and each capability. `ReadAll` happens to have the same shape on both stores, so
-a one-line local interface plus a type assertion suffices — but that convergence
-is a convention, not a contract the compiler enforces.
+The promotion came with a constraint: **global reads are forward-only**. There
+is no direction in `ReadAllOptions`, because the stable-prefix guarantee is only
+defined going forward. That is why the feed here opens on `/api/all/tail`, which
+scans forward and keeps the last page, rather than reading backwards from the
+end — see [`server.go`](./server.go), where the cost is spelled out.
 
-**The cost of promoting these into core interfaces** would be the opposite: a
-canonical `StreamMetadata` type and, say, `StreamLister` / `AllReader` interfaces
-would make this tool's adapters vanish — but the contract gets bigger, and not
-every backend can honestly satisfy it. A store without a global sequence (or one
-where listing streams is prohibitively expensive) would either have to lie, error
-at runtime, or the interfaces would remain optional — which brings back capability
-detection, just spelled `interface{ ... }` assertions against core types instead
-of local ones.
+**`ListStreams` was not promoted**, and the adapter tax it charges is still
+visible in [`backend.go`](./backend.go):
 
-Either way, a generic tool must handle absence. What this example demonstrates is
-what the optional-capability path looks like **in practice**: nil fields, 501
-responses, and a UI that degrades gracefully (no stream list → manual stream-ID
-entry; no global feed → no feed tab). Stream-scoped reading needs none of it —
-the events table and its pager run entirely on the core `StreamReader`.
+```go
+type capabilities struct {
+    listStreams func(ctx context.Context) ([]streamInfo, error)   // adapted per backend
+    readAll     func(ctx context.Context, opts eventstore.ReadAllOptions) (eventstore.StreamIterator, error)
+}
+```
 
-Neither answer is presumed here; the code is the exhibit, not the argument.
+Each backend's `ListStreams` returns *its own* strategy package's
+`StreamMetadata`, so this tool defines a local `streamInfo` and a closure per
+backend to convert into it. Those two closures are textually identical and
+compile against different concrete types. That is the cost of leaving a
+capability out of core, sitting right next to the one that was promoted.
+
+So the answer was neither "put everything in core" nor "keep core minimal at all
+costs". It was: promote a capability when you can state a contract strong enough
+to program against — and `GlobalReader`'s stable-prefix rule is exactly such a
+statement — and leave it out when you cannot. Either way a generic tool must
+still handle absence, which is what the nil fields, the 501 responses, and the
+degrading UI here demonstrate. Stream-scoped reading needs none of it: the
+events table and its pager run entirely on the core `StreamReader`.
 
 ## How it works
 
@@ -118,18 +117,28 @@ Neither answer is presumed here; the code is the exhibit, not the argument.
 Each request asks for `count+1` events; the extra event's presence sets `hasMore`
 and is trimmed from the response.
 
-### The global feed pages by global position
+### The global feed pages forward by global position
 
-For `ReadAll`, both contrib stores reinterpret `AfterVersion` as a **global
-position** — the auto-incrementing `id` column of their events table, which is also
-each event's `GlobalPosition`. The bounds mirror stream reads (forward: `> after`;
-reverse: `<= after`, `0` = newest). Also unlike `ReadStream`, an empty result is an
-empty iterator rather than `ErrStreamNotFound` — "no events" is a valid state for
-a store-wide feed, and it makes tail polling cheap.
+`ReadAll` takes `ReadAllOptions`, whose `AfterPosition` is an exclusive lower
+bound on `GlobalPosition` — a dedicated type, not stream options reinterpreted.
+There is **no direction**: global reads are forward-only, because the
+stable-prefix guarantee that makes a position resumable is only defined going
+forward.
+
+That has a consequence for a browser like this one. The newest events cannot be
+fetched by reading backwards from the end, so `GET /api/all/tail` scans forward
+and keeps the last page — O(events) in time, O(count) in memory. The feed calls
+it once on open, then tails forward from the position it returns.
+
+Unlike `ReadStream`, an empty result is an empty iterator rather than
+`ErrStreamNotFound`: "no events" is a valid state for a store-wide feed, and it
+is what makes tail polling cheap.
 
 **Live tail is polling, on purpose.** Estoria event stores expose no change
 notifications, so the honest generic implementation is a 2-second poll of
 `/api/all?after=<highest position seen>`, which returns only news (or nothing).
+The stable-prefix contract is what makes that safe: nothing can later commit at
+or below a position already yielded, so polling forward cannot skip an event.
 
 ### Stream IDs and the first underscore
 
@@ -149,7 +158,8 @@ All endpoints are `GET`; there is nothing else.
 | `GET /api/info` | Backend name/label, redacted DSN, capability booleans, `readOnly: true` |
 | `GET /api/streams` | All streams (`id`, `type`, `version`), sorted by type then ID — or `501 capability_unavailable` |
 | `GET /api/streams/{id}/events?dir=forward\|reverse&after=N&count=50` | One page of a stream's events, with `hasMore` and `nextAfter` |
-| `GET /api/all?dir=forward\|reverse&after=N&count=100` | One page of the global feed (paged by global position) — or `501 capability_unavailable` |
+| `GET /api/all?after=N&count=100` | One page forward through the global feed, by global position — or `501 capability_unavailable` |
+| `GET /api/all/tail?count=100` | The newest events plus the frontier position, for opening the feed — or `501 capability_unavailable` |
 | `GET /` | The embedded UI |
 
 Events are returned with `version`, `eventType`, `eventId`, `timestamp`,

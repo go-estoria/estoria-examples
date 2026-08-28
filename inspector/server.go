@@ -46,6 +46,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/streams", s.handleStreams)
 	mux.HandleFunc("GET /api/streams/{id}/events", s.handleStreamEvents)
 	mux.HandleFunc("GET /api/all", s.handleAll)
+	mux.HandleFunc("GET /api/all/tail", s.handleAllTail)
 
 	web, err := fs.Sub(webFiles, "web")
 	if err != nil {
@@ -174,24 +175,16 @@ func (s *server) handleStreamEvents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleAll pages through the global event feed via the readAll capability.
+// handleAll pages forward through the global event feed.
 //
-// For ReadAll, both contrib stores reinterpret ReadStreamOptions.AfterVersion
-// as a GLOBAL POSITION rather than a stream version (their events tables are
-// ordered by an auto-incrementing id column, which is also each event's
-// GlobalPosition). The boundary semantics mirror stream reads: forward reads
-// return events with position > after; reverse reads return position <=
-// after, with after=0 meaning "from the newest event".
+// Global reads are forward-only by contract: ReadAllOptions carries an
+// exclusive AfterPosition and no direction. That is deliberate — the stable
+// prefix that makes a position a resumable checkpoint is only defined going
+// forward, and it is exactly how a projection consumes a store.
 func (s *server) handleAll(w http.ResponseWriter, r *http.Request) {
 	if s.backend.caps.readAll == nil {
 		writeCapabilityUnavailable(w, "readAll",
 			"this backend does not support reading all events in global order")
-		return
-	}
-
-	direction, err := parseDirection(r.URL.Query().Get("dir"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -206,7 +199,10 @@ func (s *server) handleAll(w http.ResponseWriter, r *http.Request) {
 	// Unlike ReadStream, ReadAll yields an empty iterator (not an error) when
 	// nothing matches — "no events yet" is a valid state for a global feed,
 	// and it is what makes tail polling with after=<latest position> cheap.
-	iter, err := s.backend.caps.readAll(ctx, pageOptions(direction, after, count))
+	iter, err := s.backend.caps.readAll(ctx, eventstore.ReadAllOptions{
+		AfterPosition: after,
+		Count:         count + 1, // one extra: detect a further page without a second query
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -219,7 +215,7 @@ func (s *server) handleAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page, hasMore, nextAfter := paginate(events, count, direction, globalCursor)
+	page, hasMore, nextAfter := paginate(events, count, eventstore.Forward, globalCursor)
 	if len(page) == 0 {
 		nextAfter = after
 	}
@@ -227,6 +223,60 @@ func (s *server) handleAll(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"events":    page,
 		"hasMore":   hasMore,
+		"nextAfter": nextAfter,
+	})
+}
+
+// handleAllTail returns the most recent events in the store, so the feed can
+// open on current activity rather than on the beginning of history.
+//
+// This costs a full forward scan, because a forward-only reader cannot seek
+// from the end. That is the honest price of the contract, and it is why this
+// is a separate endpoint the UI calls once rather than the feed's paging
+// mechanism: only the last count events are retained, in a ring, so the scan
+// is O(events) in time but O(count) in memory.
+func (s *server) handleAllTail(w http.ResponseWriter, r *http.Request) {
+	if s.backend.caps.readAll == nil {
+		writeCapabilityUnavailable(w, "readAll",
+			"this backend does not support reading all events in global order")
+		return
+	}
+
+	_, count, err := parsePaging(r, defaultFeedPageSize)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ctx := r.Context()
+
+	iter, err := s.backend.caps.readAll(ctx, eventstore.ReadAllOptions{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer iter.Close(ctx)
+
+	all, err := collectEvents(ctx, iter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tail := all
+	if int64(len(tail)) > count {
+		tail = tail[int64(len(tail))-count:]
+	}
+
+	// The frontier this read observed: where the UI resumes tailing from.
+	nextAfter := int64(0)
+	if len(all) > 0 {
+		nextAfter = globalCursor(all[len(all)-1])
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"events":    tail,
+		"total":     len(all),
 		"nextAfter": nextAfter,
 	})
 }
