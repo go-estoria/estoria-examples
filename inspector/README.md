@@ -180,6 +180,36 @@ The inspector never creates or migrates a database. If the SQLite file doesn't
 exist, or the expected tables (`event`, `stream` — the contrib default strategy's
 schema) are missing, it exits with an error saying exactly that.
 
+## Deploying it
+
+The example ships a Dockerfile: a two-stage build ending in distroless static
+(about 26 MB, no shell, runs as nonroot). Both drivers are pure Go, so
+`CGO_ENABLED=0` is all it takes.
+
+```sh
+docker build -t estoria-inspector .
+docker run -p 8085:8085 -e DATABASE_URL=postgres://... estoria-inspector
+```
+
+On Railway, add a service pointed at this repository and set its **Root
+Directory** to `/inspector`. It listens on `$PORT` and reads its store from
+`$DATABASE_URL` when they are set, so a hosted inspector browses whichever
+service's database it is given — reference another service's `DATABASE_URL` and
+nothing else changes.
+
+Two flags exist only for public hosting:
+
+| Flag | Effect |
+| --- | --- |
+| `-reads-per-minute N` | per-IP token bucket on `/api/all/tail`, the one endpoint that scans the whole store |
+| `-trust-proxy` | take the client IP from `X-Forwarded-For` (only behind a proxy that overwrites it) |
+
+There is no reset and no write limiting, because this tool never writes: the
+store is held as an `eventstore.StreamReader` and `AppendStream` is never
+called. What needs bounding is read cost. Stream lists and paged reads are
+bounded work and stay unmetered — throttling them would only make a public
+instance feel broken.
+
 ## Adding a backend (exercise)
 
 The registry in [`backend.go`](./backend.go) maps a name to a constructor

@@ -118,6 +118,44 @@ DEBUG=1 go run .      # verbose estoria logging (watch hydration and snapshots)
 go run . -h           # flags: -addr, -db, -devices, -snapshot-every
 ```
 
+## Deploying it
+
+The example ships a Dockerfile: a two-stage build ending in distroless static
+(about 21 MB, no shell, runs as nonroot). The SQLite driver is pure Go, so
+`CGO_ENABLED=0` is all it takes.
+
+```sh
+docker build -t estoria-fleet .
+docker run -p 8083:8083 estoria-fleet
+```
+
+On Railway, add a service pointed at this repository and set its **Root
+Directory** to `/fleet` — without it the build runs from the repository root,
+which has no module and no Dockerfile. `railway.toml` in this folder covers the
+rest (builder, health check, restart policy, watch paths).
+
+It listens on `$PORT` when the platform sets one. The database lives at `/data`;
+mount something there to keep the fleet's history across deploys, or don't, and
+every deploy starts from a freshly registered fleet.
+
+Five flags exist only for public hosting, and are off unless passed:
+
+| Flag | Effect |
+| --- | --- |
+| `-pause-when-idle 2m` | stop the simulator once nobody has been watching that long, and restart it when someone connects |
+| `-hourly-reset` | clear the fleet's history and re-register devices at the top of every hour |
+| `-writes-per-minute N` | per-IP token bucket on state-changing requests; reads are never limited |
+| `-trust-proxy` | take the client IP from `X-Forwarded-For` (only behind a proxy that overwrites it) |
+| `-max-clients N` | cap concurrent SSE connections |
+
+`-pause-when-idle` is what makes this example affordable to host: an unwatched
+instance writes nothing at all. The hourly reset earns its keep too — the
+simulator appends continuously, so it is the only thing bounding stream growth
+on a demo somebody is actually watching.
+
+The image's default command turns all five on. Running the example locally with
+`go run .` turns none of them on, and the simulator runs continuously.
+
 ## Things to try
 
 - `go run . -snapshot-every 20` — snapshots land every few minutes per device;
