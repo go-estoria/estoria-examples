@@ -39,6 +39,7 @@ import (
 	pgstrategy "github.com/go-estoria/estoria-contrib/postgres/eventstore/strategy"
 	pgoutbox "github.com/go-estoria/estoria-contrib/postgres/outbox"
 	"github.com/go-estoria/estoria/aggregatestore"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -225,8 +226,17 @@ func run(ctx context.Context, addr, dsn string, demo demoConfig) error {
 		events:    eventStore,
 		readModel: rm,
 		pool:      pool,
-		hub:       broadcasts,
-		log:       webhookLog,
+		createSchema: func(ctx context.Context, tx pgx.Tx) error {
+			// The same DDL applied at startup, in the caller's transaction.
+			for _, ddl := range []string{strat.Schema(), rm.schema(), ob.Schema()} {
+				if _, err := tx.Exec(ctx, ddl); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		hub: broadcasts,
+		log: webhookLog,
 	}
 
 	// Hosted-demo behavior, all off by default (see demoConfig).
@@ -237,6 +247,11 @@ func run(ctx context.Context, addr, dsn string, demo demoConfig) error {
 		handler = limiter.middleware(handler)
 	}
 	if demo.hourlyReset {
+		// Once at startup too: a deploy that changed the schema would
+		// otherwise serve reads and fail writes until the top of the hour.
+		if err := srv.resetDemo(ctx); err != nil {
+			return fmt.Errorf("resetting demo at startup: %w", err)
+		}
 		go srv.runHourlyReset(ctx)
 	}
 
