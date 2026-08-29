@@ -22,8 +22,8 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           # gofmt is module-independent; any module's toolchain will do.
           go-version-file: kanban/go.mod
@@ -55,8 +55,8 @@ jobs:
           - orders
           - postgres
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: ${{ matrix.module }}/go.mod
           # Without this, setup-go looks for a go.sum at the repo root, finds
@@ -88,8 +88,8 @@ jobs:
           - orders
           - postgres
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: ${{ matrix.module }}/go.mod
           # Without this, setup-go looks for a go.sum at the repo root, finds
