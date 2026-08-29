@@ -107,3 +107,17 @@ jobs:
       - name: Test
         run: go test -race -cover ./...
         working-directory: ${{ matrix.module }}
+
+  # Single required-status-check context for branch protection: one stable
+  # name ("CI OK") no matter how the jobs and matrices above evolve.
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [format, lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs succeeded
+        run: |
+          for result in ${{ join(needs.*.result, ' ') }}; do
+            [ "$result" = "success" ] || { echo "a required job reported: $result"; exit 1; }
+          done

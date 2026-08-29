@@ -30,12 +30,15 @@ updates:
       - dependencies
       - patch release
     groups:
-      # Batch minor/patch bumps into a single PR to cut noise.
-      # Major bumps still arrive as individual PRs.
+      # Batch minor/patch bumps into a single PR to cut noise; majors arrive
+      # as one grouped PR of their own for human review.
       go-minor-patch:
         update-types:
           - minor
           - patch
+      go-major:
+        update-types:
+          - major
 
   # GitHub Actions used by the workflows in this repo. These don't touch any
   # example, so they don't cut a version.
@@ -51,3 +54,6 @@ updates:
         update-types:
           - minor
           - patch
+      github-actions-major:
+        update-types:
+          - major
