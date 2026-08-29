@@ -35,7 +35,7 @@ func resetStore(ctx context.Context, pool *pgxpool.Pool) error {
 
 	// The event store's own tables, the checkpoint table, and every
 	// account_balances_vN built by a rebuild.
-	tables = append(tables, "event", "stream", "projection_checkpoints")
+	tables = append(tables, "event", "stream", "projection_checkpoint")
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {

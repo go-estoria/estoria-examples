@@ -21,7 +21,7 @@ open http://localhost:8084
 | The projection lifecycle orchestrator: `Begin`/`Resume`, `Run`, `Promote`, `Rollback`, `Abandon`, `Retire` | [`server.go`](server.go) |
 | Logical cutover: reads consult a `Router` for the live version and compose the table name per query | [`server.go`](server.go) (`handleListAccounts`), [`main.go`](main.go) |
 | The cutover worker converging the router on recorded promotions and rollbacks | [`main.go`](main.go) |
-| A durable Postgres checkpoint store, with checkpoint recency as the liveness signal | [`checkpoints.go`](checkpoints.go) |
+| A durable Postgres checkpoint store ([from estoria-contrib](https://github.com/go-estoria/estoria-contrib/tree/main/postgres/checkpointstore)), with checkpoint recency as the liveness signal | [`main.go`](main.go) |
 | At-least-once processing made safe by per-row apply-if-newer guards | [`readmodel.go`](readmodel.go) (`balancesHandler`) |
 | Steady-state serving handed between the lifecycle run and a plain processor | [`serving.go`](serving.go) |
 | Crash recovery: standing runner claims, and audited operator takeover | [`server.go`](server.go) (`handleResumeRebuild`) |

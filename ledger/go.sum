@@ -33,8 +33,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/go-estoria/estoria v0.14.0 h1:XHF2Uwv3YKDbJ27a5kxqHcC3Y16dxJHD2pcQrRtLR1g=
 github.com/go-estoria/estoria v0.14.0/go.mod h1:w/1pwY/YU9M4WV+HdL2vpYVAhVINFwaVf1nSPnebNJQ=
-github.com/go-estoria/estoria-contrib v0.11.1 h1:eNAkozuJDD5cTyt7EBzYvnsWCo6wNzAv/NztTyVFyN4=
-github.com/go-estoria/estoria-contrib v0.11.1/go.mod h1:ewPXQ51UPjKC/hrGXn5ez0FdVi753QQNEpMpkqBtpg0=
+github.com/go-estoria/estoria-contrib v0.12.0 h1:sCwt12buYF1F8FBfOhsNtkTgkglksg3rBZjmelC2Zgg=
+github.com/go-estoria/estoria-contrib v0.12.0/go.mod h1:ewPXQ51UPjKC/hrGXn5ez0FdVi753QQNEpMpkqBtpg0=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
