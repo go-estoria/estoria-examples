@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/go-estoria/estoria"
+	pgcheckpointstore "github.com/go-estoria/estoria-contrib/postgres/checkpointstore"
 	pgeventstore "github.com/go-estoria/estoria-contrib/postgres/eventstore"
 	pgstrategy "github.com/go-estoria/estoria-contrib/postgres/eventstore/strategy"
 	"github.com/go-estoria/estoria/aggregatestore"
@@ -122,7 +123,11 @@ func run(ctx context.Context, addr, dsn string, resetOnBoot bool, writesPerMinut
 
 	// 3. The read side: versioned balance tables, and durable checkpoints
 	// for whichever processor is building or tailing each version.
-	checkpoints := &checkpointStore{pool: pool}
+	checkpoints, err := pgcheckpointstore.New(pool)
+	if err != nil {
+		return fmt.Errorf("creating checkpoint store: %w", err)
+	}
+
 	if _, err := pool.Exec(ctx, checkpoints.Schema()); err != nil {
 		return fmt.Errorf("creating checkpoint schema: %w", err)
 	}
