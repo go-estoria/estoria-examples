@@ -3,12 +3,12 @@ module github.com/go-estoria/estoria-examples/inspector
 go 1.26.2
 
 require (
-	github.com/go-estoria/estoria v0.14.0
-	github.com/go-estoria/estoria-contrib v0.11.1
+	github.com/go-estoria/estoria v0.14.1
+	github.com/go-estoria/estoria-contrib v0.12.1
 	github.com/gofrs/uuid/v5 v5.5.1
-	github.com/jackc/pgx/v5 v5.10.0
-	golang.org/x/time v0.15.0
-	modernc.org/sqlite v1.57.0
+	github.com/jackc/pgx/v5 v5.11.0
+	golang.org/x/time v0.16.0
+	modernc.org/sqlite v1.58.0
 )
 
 require (
@@ -20,10 +20,10 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
-	modernc.org/libc v1.74.4 // indirect
+	golang.org/x/text v0.41.0 // indirect
+	modernc.org/libc v1.75.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
+	modernc.org/memory v1.12.1 // indirect
 )
