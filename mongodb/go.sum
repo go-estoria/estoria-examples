@@ -30,8 +30,8 @@ github.com/ebitengine/purego v0.10.0 h1:QIw4xfpWT6GWTzaW5XEKy3HXoqrJGx1ijYHzTF0/
 github.com/ebitengine/purego v0.10.0/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/go-estoria/estoria v0.8.0 h1:vEadMNigE+stOQsvWBEpk/JdFgiJpg1uJMdlyGdCnwE=
-github.com/go-estoria/estoria v0.8.0/go.mod h1:w/1pwY/YU9M4WV+HdL2vpYVAhVINFwaVf1nSPnebNJQ=
+github.com/go-estoria/estoria v0.15.0 h1:mJ60B59GRljzv69EPl7RpfDzjsXxQA6AUyvbSIfZG+Y=
+github.com/go-estoria/estoria v0.15.0/go.mod h1:W0j/1ZernjjyRPu+wjgMRn/m2T4xNQtBgjhaegHg9YQ=
 github.com/go-estoria/estoria-contrib v0.8.0 h1:iPI9jKLpjodrcTk4Tr1YEakw0b1S5PC6BbwoNtBml/g=
 github.com/go-estoria/estoria-contrib v0.8.0/go.mod h1:buwC8y+PbBsffvosOe00D2h5pGqaX0RqTNVr+aTGrDQ=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=

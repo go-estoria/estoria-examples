@@ -13,7 +13,7 @@ import (
 	mongostrategy "github.com/go-estoria/estoria-contrib/mongodb/eventstore/strategy"
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
-	"github.com/go-estoria/estoria/eventstore/projection"
+	"github.com/go-estoria/estoria/projection"
 	"github.com/gofrs/uuid/v5"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -115,7 +115,7 @@ func main() {
 	check(err)
 
 	// create a projection using the event iterator
-	proj, err := projection.New(iter)
+	proj, err := projection.NewFold(iter)
 	check(err)
 
 	// run the projection, simply printing a line for each event
@@ -141,7 +141,7 @@ func main() {
 	check(err)
 
 	// create a projection using the "all events" iterator
-	allProj, err := projection.New(allIter)
+	allProj, err := projection.NewFold(allIter)
 	check(err)
 
 	// run the projection

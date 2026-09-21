@@ -3,7 +3,7 @@ module github.com/go-estoria/estoria-examples/inspector
 go 1.26.2
 
 require (
-	github.com/go-estoria/estoria v0.14.1
+	github.com/go-estoria/estoria v0.15.0
 	github.com/go-estoria/estoria-contrib v0.12.1
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/jackc/pgx/v5 v5.11.0

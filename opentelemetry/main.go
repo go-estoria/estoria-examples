@@ -14,7 +14,7 @@ import (
 	"github.com/go-estoria/estoria/aggregatestore"
 	"github.com/go-estoria/estoria/eventstore"
 	memoryes "github.com/go-estoria/estoria/eventstore/memory"
-	"github.com/go-estoria/estoria/eventstore/projection"
+	"github.com/go-estoria/estoria/projection"
 	"github.com/go-estoria/estoria/snapshotstore"
 	memoryss "github.com/go-estoria/estoria/snapshotstore/memory"
 	"github.com/gofrs/uuid/v5"
@@ -148,7 +148,7 @@ func main() {
 	check(err)
 
 	// create a projection using the event iterator
-	proj, err := projection.New(iter)
+	proj, err := projection.NewFold(iter)
 	check(err)
 
 	// run the projection, simply printing a line for each event
