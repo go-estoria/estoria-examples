@@ -1,7 +1,7 @@
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
-github.com/go-estoria/estoria v0.14.1 h1:Bgd14tcyBahSCi8mr1Wzk5jzbILrSVnXiWCoYSOV2qg=
-github.com/go-estoria/estoria v0.14.1/go.mod h1:W0j/1ZernjjyRPu+wjgMRn/m2T4xNQtBgjhaegHg9YQ=
+github.com/go-estoria/estoria v0.15.0 h1:mJ60B59GRljzv69EPl7RpfDzjsXxQA6AUyvbSIfZG+Y=
+github.com/go-estoria/estoria v0.15.0/go.mod h1:W0j/1ZernjjyRPu+wjgMRn/m2T4xNQtBgjhaegHg9YQ=
 github.com/go-estoria/estoria-contrib v0.12.1 h1:sBcvEWvWeWCZss/g6DLD7jjictOzsimghnlOrl/M390=
 github.com/go-estoria/estoria-contrib v0.12.1/go.mod h1:zBPoq32PhgORhwbYkn3ZIvMcESWXIJ/eLaipfLLeK1g=
 github.com/gofrs/uuid/v5 v5.5.1 h1:z1Ce19/JwNidXpy3tOQc3241lnJLKdKyq/xlNvlD4Ng=
